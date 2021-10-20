@@ -1,0 +1,12 @@
+<launch>
+<include file="$(find TMAP)/launch/node_singlePtCloud.launch" />
+
+<node name="GndSeg_node" pkg="TMAP" type="gSeg_node" output="screen">
+<rosparam param="/gSeg_algorithm">"patchwork_m"</rosparam> 
+</node>
+
+<!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find TMAP)/rviz/ground_segmentation_demo.rviz"/> -->
+<!-- <rosparam command="load" file="$(find TMAP)/config/params.yaml" /> -->
+<rosparam command="load" file="$(find TMAP)/config/params_kitti.yaml" />
+
+</launch>

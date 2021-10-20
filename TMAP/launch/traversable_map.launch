@@ -1,0 +1,9 @@
+<launch>
+
+<node name="TrvMap_node" pkg="TMAP" type="tMap_node" output="screen">
+</node>
+
+<!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find TMAP)/rviz/tMap_demo.rviz"/> -->
+<rosparam command="load" file="$(find TMAP)/config/params.yaml" />
+
+</launch>

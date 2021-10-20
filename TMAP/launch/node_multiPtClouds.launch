@@ -1,0 +1,9 @@
+<launch>
+
+<node name="LIG_PC_node" pkg="TMAP" type="lig_node_gen" output="screen">
+</node>
+
+<!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find TMAP)/rviz/pre_processing.rviz"/> -->
+<rosparam command="load" file="$(find TMAP)/config/params.yaml" />
+
+</launch>
