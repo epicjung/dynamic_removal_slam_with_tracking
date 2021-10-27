@@ -102,6 +102,8 @@ public:
     int downsampleRate;
     float lidarMinRange;
     float lidarMaxRange;
+    float minVertAngle;
+    float maxVertAngle;
 
     // IMU
     float imuAccNoise;
@@ -187,6 +189,8 @@ public:
     float maxRatio;
     float minDensity;
 
+    std::string dataType;
+
     ParamServer()
     {
         nh.param<std::string>("/robot_id", robot_id, "roboat");
@@ -231,6 +235,8 @@ public:
         nh.param<int>("lio_sam/downsampleRate", downsampleRate, 1);
         nh.param<float>("lio_sam/lidarMinRange", lidarMinRange, 1.0);
         nh.param<float>("lio_sam/lidarMaxRange", lidarMaxRange, 1000.0);
+        nh.param<float>("lio_sam/minVertAngle", minVertAngle, -26.8);
+        nh.param<float>("lio_sam/maxVertAngle", maxVertAngle, 2.0);
 
         nh.param<float>("lio_sam/imuAccNoise", imuAccNoise, 0.01);
         nh.param<float>("lio_sam/imuGyrNoise", imuGyrNoise, 0.001);
@@ -306,6 +312,7 @@ public:
         nh.param<float>(  "tracking/lshape/maxRatio", maxRatio, 1.0);
         nh.param<float>(  "tracking/lshape/minDensity", minDensity, 10.0);
 
+        nh.param<std::string>("rosbag/type", dataType, "normal");
         usleep(100);
     }
 

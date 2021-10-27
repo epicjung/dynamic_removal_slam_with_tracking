@@ -273,6 +273,60 @@ public:
         timeScanCur = cloudHeader.stamp.toSec();
         timeScanEnd = timeScanCur + laserCloudIn->points.back().time;
 
+        if (dataType == "carla")
+        {
+            float verticalAngle, horizonAngle, range;
+            size_t rowInd, columnIdn, index, cloudSize;
+            cloudSize = laserCloudIn->points.size();
+            pcl::PointCloud<PointXYZIRT>::Ptr laserFiltered(new pcl::PointCloud<PointXYZIRT>());
+            
+            std::vector<float> angles;
+            float resolution = (maxVertAngle - minVertAngle) / (N_SCAN-1);
+            for(int a = 0; a < N_SCAN; a++)
+                angles.push_back(minVertAngle + a*resolution);
+            
+
+            float EGO_WIDTH = 2.17;
+            float EGO_LENGTH = 4.809;
+
+            for (pcl::PointCloud<PointXYZIRT>::iterator it = laserCloudIn->begin(); it != laserCloudIn->end(); it++)
+            {
+                if (isnan(it->x) || isnan(it->y) || isnan(it->z))
+                {
+                }
+                else if((it->y >= -EGO_WIDTH/2.0 && it->y <= EGO_WIDTH/2.0) && (it->x <= EGO_LENGTH / 2.0 + 0.2 && it->x >= -EGO_LENGTH / 2.0 + 0.2))  // remove pointcloud for ego vehicle
+                {
+                }
+                else
+                {
+                    PointXYZIRT thisPoint;
+                    thisPoint.x = it->x;
+                    thisPoint.y = it->y;
+                    thisPoint.z = it->z;
+                    verticalAngle = atan2(thisPoint.z, sqrt(thisPoint.x*thisPoint.x + thisPoint.y*thisPoint.y))*180/M_PI;
+                    auto iter_geq = std::lower_bound(angles.begin(), angles.end(), verticalAngle);
+                    if (iter_geq == angles.begin())
+                    {
+                        rowInd = 0;
+                    }
+                    else
+                    {
+                        float a = *(iter_geq - 1);
+                        float b = *(iter_geq);
+                        if (fabs(verticalAngle-a) < fabs(verticalAngle-b)){
+                            rowInd = iter_geq - angles.begin() - 1;
+                        } else {
+                            rowInd = iter_geq - angles.begin();
+                        }
+                    }                    
+                    it->ring = rowInd;
+                    laserFiltered->points.push_back(*it);
+                }
+            }
+            *laserCloudIn = *laserFiltered;
+            laserCloudIn->is_dense = true;
+        }
+
         // check dense flag
         if (laserCloudIn->is_dense == false)
         {
@@ -281,22 +335,25 @@ public:
         }
 
         // check ring channel
-        static int ringFlag = 0;
-        if (ringFlag == 0)
+        if (dataType == "normal")
         {
-            ringFlag = -1;
-            for (int i = 0; i < (int)currentCloudMsg.fields.size(); ++i)
+            static int ringFlag = 0;
+            if (ringFlag == 0)
             {
-                if (currentCloudMsg.fields[i].name == "ring")
+                ringFlag = -1;
+                for (int i = 0; i < (int)currentCloudMsg.fields.size(); ++i)
                 {
-                    ringFlag = 1;
-                    break;
+                    if (currentCloudMsg.fields[i].name == "ring")
+                    {
+                        ringFlag = 1;
+                        break;
+                    }
                 }
-            }
-            if (ringFlag == -1)
-            {
-                ROS_ERROR("Point cloud ring channel not available, please configure your point cloud data!");
-                ros::shutdown();
+                if (ringFlag == -1)
+                {
+                    ROS_ERROR("Point cloud ring channel not available, please configure your point cloud data!");
+                    ros::shutdown();
+                }
             }
         }
 
@@ -697,7 +754,6 @@ public:
         downsize_filter.filter(*nonground_ds);
         ROS_WARN("Voxelize: %f ms", voxel_time.toc());
         printf("After voxelized (%f m): %d\n", nongroundDownsample, (int)nonground_ds->points.size());
-        publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, "base_link");
 
         // 4. Get initial pose
         double xCur, yCur, zCur, rollCur, pitchCur, yawCur;
@@ -708,9 +764,11 @@ public:
         init_m.getRPY(rollCur, pitchCur, yawCur);
         Eigen::Affine3f pose = pcl::getTransformation(xCur, yCur, zCur, rollCur, pitchCur, yawCur);
         pcl::transformPointCloud(*nonground_ds, *nonground_ds, pose);
+        publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, "odom");
 
         // 5. Clustering and fitting box
         meas_map.buildMap(nonground_ds, used_id_cnt);
+        publishBoundingBox(&pub_bbox, meas_map, cloudHeader.stamp, "odom");
 
         // 6. Init tracking
         TicToc tracking_time;
@@ -788,14 +846,13 @@ public:
             cluster.vel_x = tracked[i].speed[0];
             cluster.vel_y = tracked[i].speed[1];
             track_clusters.push_back(cluster);
-            printf("id: %d, tracked: %f;%f;%f, vel: %f;%f, weight: %f\n", tracked[i].id, tracked[i].position[0], tracked[i].position[1], 0.0, tracked[i].speed[0], tracked[i].speed[1], tracked[i].weight);
+            // printf("id: %d, tracked: %f;%f;%f, vel: %f;%f, weight: %f\n", tracked[i].id, tracked[i].position[0], tracked[i].position[1], 0.0, tracked[i].speed[0], tracked[i].speed[1], tracked[i].weight);
         }
         printf("meas size: %d, tracked size: %d\n", (int)target_meas.size(), (int)tracked.size());
         ROS_WARN("Tracking time: %f ms", tracking_time.toc());
         tracker_map.setMap(track_clusters);
         publishClusteredCloud(&pub_meas_cluster, &pub_meas_centroid, &pub_meas_cluster_info, meas_map, cloudHeader.stamp, "odom");
         publishClusteredCloud(&pub_tracker_cluster, &pub_tracker_centroid, &pub_tracker_cluster_info, tracker_map, cloudHeader.stamp, "odom");
-        publishBoundingBox(&pub_bbox, meas_map, cloudHeader.stamp, "odom");
     }
 
     void publishClusteredCloud(ros::Publisher *thisPubCloud, ros::Publisher *thisPubCentroid, ros::Publisher *thisPubInfo, ClusterMap map, ros::Time thisStamp, string thisFrame)

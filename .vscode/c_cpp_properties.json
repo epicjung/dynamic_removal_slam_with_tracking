@@ -1,0 +1,23 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "",
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "includePath": [
+        "/home/euigon/liosam_ws/devel/include/**",
+        "/home/euigon/lig_ws/devel/include/**",
+        "/opt/ros/melodic/include/**",
+        "/home/euigon/liosam_ws/src/lidar_tracking_test/TMAP/include/**",
+        "/home/euigon/lig_ws/src/lignex1/tools/vision_opencv-1.12.0/cv_bridge/include/**",
+        "/home/euigon/lig_ws/src/lignex1/tools/vision_opencv-1.12.0/image_geometry/include/**",
+        "/home/euigon/liosam_ws/src/lidar_tracking_test/LIO-SAM/include/**",
+        "/home/euigon/lig_ws/src/lignex1/ouster/ouster_ros/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS"
+    }
+  ],
+  "version": 4
+}

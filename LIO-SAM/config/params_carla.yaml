@@ -1,8 +1,8 @@
 lio_sam:
 
   # Topics
-  pointCloudTopic: "/velodyne_points"               # Point cloud data
-  imuTopic: "/gx5/imu/data"                         # IMU data
+  pointCloudTopic: "/carla/ego_vehicle/lidar/lidar/point_cloud"               # Point cloud data
+  imuTopic: "/carla/ego_vehicle/imu/imu"                         # IMU data
 
   odomTopic: "/odometry/imu"                   # IMU pre-preintegration odometry, same frequency as IMU
 
@@ -25,35 +25,27 @@ lio_sam:
   savePCDDirectory: "/Downloads/LOAM/"        # in your home folder, starts and ends with "/". Warning: the code deletes "LOAM" folder then recreates it. See "mapOptimization" for implementation
 
   # Sensor Settings
-  sensor: velodyne                            # lidar sensor type, either 'velodyne' or 'ouster'
-  N_SCAN: 16                                  # number of lidar channel (i.e., 16, 32, 64, 128)
+  sensor: ouster                            # lidar sensor type, either 'velodyne' or 'ouster'
+  N_SCAN: 64                                  # number of lidar channel (i.e., 16, 32, 64, 128)
   Horizon_SCAN: 1800                          # lidar horizontal resolution (Velodyne:1800, Ouster:512,1024,2048)
-  downsampleRate: 1                           # default: 1. Downsample your data if too many points. i.e., 16 = 64 / 4, 16 = 16 / 1
+  downsampleRate: 2                           # default: 1. Downsample your data if too many points. i.e., 16 = 64 / 4, 16 = 16 / 1
   lidarMinRange: 0.1                          # default: 1.0, minimum lidar range to be used
   lidarMaxRange: 1000.0                       # default: 1000.0, maximum lidar range to be used
-
+  minAngle: -26.8
+  maxAngle: 2.0
+  
   # IMU Settings
-  imuAccNoise:  4.57163253838e-03
-  imuGyrNoise: 2.85881950827e-03
+  imuAccNoise: 3.9939570888238808e-03
+  imuGyrNoise: 1.5636343949698187e-03
   imuAccBiasN: 6.4356659353532566e-05
   imuGyrBiasN: 3.5640318696367613e-05
   imuGravity: 9.80511
   imuRPYWeight: 0.01
 
   # Extrinsics (lidar -> IMU)
-  extrinsicTrans: [-0.005, 0.021, -0.368]
-  extrinsicRot: [-1, 0, 0,
-                0, 1, 0,
-                0, 0, -1]
-  extrinsicRPY: [0,  1, 0,
-                 -1, 0, 0,
-                  0, 0, 1]
-  # extrinsicRot: [1, 0, 0,
-  #                 0, 1, 0,
-  #                 0, 0, 1]
-  # extrinsicRPY: [1, 0, 0,
-  #                 0, 1, 0,
-  #                 0, 0, 1]
+  extrinsicTrans: [-0.3, 0.0, -0.3]
+  extrinsicRot: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+  extrinsicRPY: [1, 0, 0, 0, 1, 0, 0, 0, 1]
 
   # Extrinsics (IMU -> GPS)
   imu2gpsTrans: [0.144, -0.161, 0.769]
@@ -128,10 +120,10 @@ tracking:
 
   # L-Shape fitting
   lshape:
-    minHeight: 0.0
-    maxHeight: 4.0
-    maxArea: 30.0
-    maxRatio: 15.0
+    minHeight: 0.5
+    maxHeight: 3.0
+    maxArea: 20.0
+    maxRatio: 10.0
     minDensity: 3.0
 
 
@@ -199,5 +191,6 @@ ekf_gps:
                                0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,    0.01, 0,      0,
                                0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,    0,    0.01,   0,
                                0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,    0,    0,      0.015]
+
 rosbag:
-  type: "normal"
+  type: "carla"

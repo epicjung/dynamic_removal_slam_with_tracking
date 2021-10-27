@@ -380,11 +380,15 @@ public:
         graphValues.insert(X(key), propState_.pose());
         graphValues.insert(V(key), propState_.v());
         graphValues.insert(B(key), prevBias_);
+        printf("cur: %f;%f;%f, prev: %f;%f;%f, bias: %f;%f;%f;%f;%f;%f\n", propState_.position().x(),propState_.position().y(), propState_.position().z(),
+        prevState_.position().x(), prevState_.position().y(), prevState_.position().z(), prevBias_.accelerometer().x(), prevBias_.accelerometer().y(), prevBias_.accelerometer().z(),
+        prevBias_.gyroscope().x(), prevBias_.gyroscope().y(), prevBias_.gyroscope().z());
         // optimize
         optimizer.update(graphFactors, graphValues);
         optimizer.update();
         graphFactors.resize(0);
         graphValues.clear();
+        printf("Updated\n");
         // Overwrite the beginning of the preintegration for the next step.
         gtsam::Values result = optimizer.calculateEstimate();
         prevPose_  = result.at<gtsam::Pose3>(X(key));
