@@ -29,6 +29,8 @@ namespace gmphd
                 m_track_id = rhs.m_track_id;
                 m_isFalseTarget = rhs.m_isFalseTarget;
                 model_prob = rhs.model_prob;
+                model_type = rhs.model_type;
+                c = rhs.c;
             }
 
             return *this;
@@ -40,9 +42,10 @@ namespace gmphd
             m_cov.setIdentity();
             m_weight = 0.f;
             m_track_id = -1;
-            model_prob = VectorXd::Zero(2);
-            model_prob << 0.5, 0.5;
+            model_prob = 0.5;
+            model_type = -1;
             m_isFalseTarget = false;
+            c = 0.5;
         }
 
         float m_weight;
@@ -50,7 +53,9 @@ namespace gmphd
         Matrix<float, D, D> m_cov;
         bool m_isFalseTarget;
         int m_track_id;
-        VectorXd model_prob;
+        float model_prob;
+        int model_type;
+        float c;
     };
 
     /*!
@@ -64,11 +69,15 @@ namespace gmphd
         GaussianMixture()
         {
             m_gaussians.clear();
+            m_gaussians2.clear();
+            m_fusedGaussians.clear();
         }
 
         GaussianMixture(GaussianMixture const &source)
         {
             m_gaussians = source.m_gaussians;
+            m_gaussians2 = source.m_gaussians2;
+            m_fusedGaussians = source.m_fusedGaussians;
         }
 
         GaussianMixture(vector<GaussianModel<D>> const &source)
@@ -84,6 +93,8 @@ namespace gmphd
 
             // Else, use vectors & Eigen "=" operator
             m_gaussians = source.m_gaussians;
+            m_gaussians2 = source.m_gaussians2;
+            m_fusedGaussians = source.m_fusedGaussians;
             return *this;
         }
 
@@ -377,5 +388,7 @@ namespace gmphd
 
     public:
         vector<GaussianModel<D>> m_gaussians;
+        vector<GaussianModel<D>> m_gaussians2;
+        vector<GaussianModel<D>> m_fusedGaussians;
     };
 } // namespace gmphd

@@ -832,10 +832,11 @@ public:
         target_tracker.propagate();
 
         // 8. Get tracker
-        const auto tracked = target_tracker.getTrackedTargets(minWeightTrack);
+        const auto tracked = target_tracker.getTrackedTargets2(minWeightTrack);
 
         tracker_map.clear();
         std::vector<Cluster> track_clusters;
+        printf("Tracked\n");
         for (size_t i = 0; i < tracked.size(); i++)
         {
             Cluster cluster;
@@ -846,7 +847,8 @@ public:
             cluster.vel_x = tracked[i].speed[0];
             cluster.vel_y = tracked[i].speed[1];
             track_clusters.push_back(cluster);
-            // printf("id: %d, tracked: %f;%f;%f, vel: %f;%f, weight: %f\n", tracked[i].id, tracked[i].position[0], tracked[i].position[1], 0.0, tracked[i].speed[0], tracked[i].speed[1], tracked[i].weight);
+            printf("id: %d, type: %d, prob: %f\n", tracked[i].id, tracked[i].type, tracked[i].prob);
+            printf("pos: %f;%f;%f, vel: %f;%f, weight: %f\n", tracked[i].id, tracked[i].position[0], tracked[i].position[1], 0.0, tracked[i].speed[0], tracked[i].speed[1], tracked[i].weight);
         }
         printf("meas size: %d, tracked size: %d\n", (int)target_meas.size(), (int)tracked.size());
         ROS_WARN("Tracking time: %f ms", tracking_time.toc());
