@@ -70,6 +70,7 @@ private:
     Eigen::Affine3f transStartInverse;
 
     pcl::PointCloud<PointXYZIRT>::Ptr laserCloudIn;
+    pcl::PointCloud<PointType>::Ptr laserCloudInRaw;
     pcl::PointCloud<OusterPointXYZIRT>::Ptr tmpOusterCloudIn;
     pcl::PointCloud<PointType>::Ptr   fullCloud;
     pcl::PointCloud<PointType>::Ptr   extractedCloud;
@@ -100,6 +101,7 @@ private:
     ros::Publisher pub_ground_cloud;
     ros::Publisher pub_nonground_cloud;
     ros::Publisher pub_nonground_ds_cloud;
+    ros::Publisher pub_static_scene;
     bool tracker_flag;
     
     gmphd::IMMGMPHD<2> target_tracker;
@@ -127,6 +129,8 @@ public:
         pub_ground_cloud = nh.advertise<sensor_msgs::PointCloud2>("/segmentation/ground", 1);
         pub_nonground_cloud = nh.advertise<sensor_msgs::PointCloud2>("/segmentation/nonground", 1);
         pub_nonground_ds_cloud = nh.advertise<sensor_msgs::PointCloud2>("/segmentation/nonground_ds", 1);
+
+        pub_static_scene = nh.advertise<sensor_msgs::PointCloud2>("/segmentation/static", 1);
         allocateMemory();
         resetParameters();
 
@@ -136,6 +140,7 @@ public:
     void allocateMemory()
     {
         laserCloudIn.reset(new pcl::PointCloud<PointXYZIRT>());
+        laserCloudInRaw.reset(new pcl::PointCloud<PointType>());
         tmpOusterCloudIn.reset(new pcl::PointCloud<OusterPointXYZIRT>());
         fullCloud.reset(new pcl::PointCloud<PointType>());
         extractedCloud.reset(new pcl::PointCloud<PointType>());
@@ -156,6 +161,7 @@ public:
     void resetParameters()
     {
         laserCloudIn->clear();
+        laserCloudInRaw->clear();
         extractedCloud->clear();
         // reset range matrix for range image projection
         rangeMat = cv::Mat(N_SCAN, Horizon_SCAN, CV_32F, cv::Scalar::all(FLT_MAX));
@@ -219,11 +225,11 @@ public:
         if (!deskewInfo())
             return;
 
+        tracking();
+
         projectPointCloud();
 
         cloudExtraction();
-
-        tracking();
 
         publishClouds();
 
@@ -243,6 +249,7 @@ public:
         if (sensor == SensorType::VELODYNE)
         {
             pcl::moveFromROSMsg(currentCloudMsg, *laserCloudIn);
+            pcl::moveFromROSMsg(currentCloudMsg, *laserCloudInRaw);
         }
         else if (sensor == SensorType::OUSTER)
         {
@@ -703,7 +710,7 @@ public:
         pub_bbox.publish(bbox_array);
     }
 
-    void tracking()
+       void tracking2()
     {
         static int lidar_count = -1;
         static int used_id_cnt = 0;
@@ -722,10 +729,20 @@ public:
         publishCloud(&pub_nonground_cloud, nonground, cloudHeader.stamp, "base_link");
         printf("[Query] Ground: %d, Nonground: %d, time: %f\n", (int)ground->points.size(), (int)nonground->points.size(), patchwork_process_time);
         
+        // 2. Reorder points so that nonground points come first
+        pcl::PointCloud<PointType>::Ptr ordered(new pcl::PointCloud<PointType>());
+        ordered->reserve(extractedCloud->points.size());
+        size_t nonground_size = nonground->points.size();
+        for (const auto p : nonground->points) 
+            ordered->points.push_back(p);
+
+        for (const auto p : ground->points) 
+            ordered->points.push_back(p);
+
+        // 3. Find transform
         static tf::TransformListener listener;
         static tf::StampedTransform init_transform;
 
-        // 2. Find transform
         try{
             listener.waitForTransform("odom", "base_link", cloudHeader.stamp, ros::Duration(0.01));
             listener.lookupTransform("odom", "base_link", cloudHeader.stamp, init_transform);
@@ -735,25 +752,28 @@ public:
             return;
         }
 
-        // 3. Voxel and filter
-        pcl::PointCloud<PointType>::Ptr cloud_filtered(new pcl::PointCloud<PointType>());
         TicToc voxel_time;
-        static pcl::PassThrough<PointType> pass;
-        pass.setInputCloud(nonground);
-        pass.setFilterFieldName("z");
-        pass.setFilterLimits(minZ, maxZ);
-        pass.filter(*cloud_filtered);
-        printf("After z filter: %d\n", (int)cloud_filtered->points.size());
-        *nonground = *cloud_filtered;
+        // // 3. Voxel and filter
+        // pcl::PointCloud<PointType>::Ptr cloud_filtered(new pcl::PointCloud<PointType>());
+        // static pcl::PassThrough<PointType> pass;
+        // pass.setInputCloud(nonground);
+        // pass.setFilterFieldName("z");
+        // pass.setFilterLimits(minZ, maxZ);
+        // pass.filter(*cloud_filtered);
+        // printf("After z filter: %d\n", (int)cloud_filtered->points.size());
+        // *nonground = *cloud_filtered;
 
-        // downsize_filter.setSaveLeafLayout(true);
         pcl::PointCloud<PointType>::Ptr nonground_ds(new pcl::PointCloud<PointType>());
+        pcl::PointCloud<PointType>::Ptr nonground_local_ds(new pcl::PointCloud<PointType>());
+
         static pcl::VoxelGrid<PointType> downsize_filter;
+        downsize_filter.setSaveLeafLayout(true);
         downsize_filter.setLeafSize(nongroundDownsample, nongroundDownsample, nongroundDownsample);
         downsize_filter.setInputCloud(nonground);
         downsize_filter.filter(*nonground_ds);
         ROS_WARN("Voxelize: %f ms", voxel_time.toc());
         printf("After voxelized (%f m): %d\n", nongroundDownsample, (int)nonground_ds->points.size());
+        *nonground_local_ds = *nonground_ds;
 
         // 4. Get initial pose
         double xCur, yCur, zCur, rollCur, pitchCur, yawCur;
@@ -784,10 +804,10 @@ public:
             birth.m_mean(2, 0) = 0.f;
             birth.m_mean(3, 0) = 0.f;
             birth.m_cov = MatrixXf::Identity(4, 4);
-            birth.m_cov(0,0) *= (meanXBirth * meanXBirth);
-            birth.m_cov(1,1) *= (meanXBirth * meanXBirth);
-            birth.m_cov(2,2) *= (meanXBirth * meanXBirth);
-            birth.m_cov(3,3) *= (meanXBirth * meanXBirth);
+            birth.m_cov(0,0) *= varPoseBirth;
+            birth.m_cov(1,1) *= varPoseBirth;
+            birth.m_cov(2,2) *= varVelBirth;
+            birth.m_cov(3,3) *= varVelBirth;
             gmphd::GaussianMixture<4> birth_model({birth});
             target_tracker.setBirthModel(birth_model);
 
@@ -796,13 +816,18 @@ public:
 
             // Detection model
             float const meas_background = 1 - detectionProb; // false detection prob
-            target_tracker.setObservationModel(detectionProb, measPoseNoise, measSpeedNoise, meas_background);
-        
+            // target_tracker.setObservationModel(detectionProb, measPoseNoise, measSpeedNoise, meas_background);
+            target_tracker.setObservationModel2(detectionProb, measPoseNoise, meas_background);
+
             // Pruning parameters
             target_tracker.setPruningParameters(pruneThres, pruneMergeThres, maxGaussian);
 
             // Spawn
             gmphd::SpawningModel<4> spawn_model;
+            spawn_model.m_cov(0,0) = spawnPoseNoise;
+            spawn_model.m_cov(1,1) = spawnPoseNoise;
+            spawn_model.m_cov(2,2) = spawnVelNoise;
+            spawn_model.m_cov(3,3) = spawnVelNoise;
             std::vector<gmphd::SpawningModel<4>> spawns = {spawn_model};
             target_tracker.setSpawnModel(spawns);
 
@@ -833,9 +858,10 @@ public:
 
         // 8. Get tracker
         const auto tracked = target_tracker.getTrackedTargets2(minWeightTrack);
-
+        
         tracker_map.clear();
         std::vector<Cluster> track_clusters;
+        std::map<int, Cluster> track_clusters_map;
         printf("Tracked\n");
         for (size_t i = 0; i < tracked.size(); i++)
         {
@@ -846,7 +872,11 @@ public:
             cluster.feature = sqrt(pow(tracked[i].speed[0], 2) + pow(tracked[i].speed[1], 2));
             cluster.vel_x = tracked[i].speed[0];
             cluster.vel_y = tracked[i].speed[1];
+            cluster.mode = tracked[i].type;
+            cluster.prob = tracked[i].prob;
+            cluster.weight = tracked[i].weight;
             track_clusters.push_back(cluster);
+            track_clusters_map.insert(std::make_pair(cluster.id, cluster));
             printf("id: %d, type: %d, prob: %f\n", tracked[i].id, tracked[i].type, tracked[i].prob);
             printf("pos: %f;%f;%f, vel: %f;%f, weight: %f\n", tracked[i].id, tracked[i].position[0], tracked[i].position[1], 0.0, tracked[i].speed[0], tracked[i].speed[1], tracked[i].weight);
         }
@@ -855,6 +885,277 @@ public:
         tracker_map.setMap(track_clusters);
         publishClusteredCloud(&pub_meas_cluster, &pub_meas_centroid, &pub_meas_cluster_info, meas_map, cloudHeader.stamp, "odom");
         publishClusteredCloud(&pub_tracker_cluster, &pub_tracker_centroid, &pub_tracker_cluster_info, tracker_map, cloudHeader.stamp, "odom");
+    
+        // 9. Removal
+        std::map<int, int> tracker_to_meas = target_tracker.getAssociationMap();
+        dynamicRemoval(tracker_to_meas, meas_clusters, track_clusters_map, nonground_local_ds, ordered, downsize_filter, nonground_size);        
+        *extractedCloud = *ordered;
+        pcl::transformPointCloud(*ordered, *ordered, pose);
+        publishCloud(&pub_static_scene, ordered, cloudHeader.stamp, "odom");
+    }
+
+    void tracking()
+    {
+        static int lidar_count = -1;
+        static int used_id_cnt = 0;
+        if (++lidar_count % (0+1) != 0)
+            return;
+        
+        meas_map.clear();
+        resetVisualization(cloudHeader.stamp, "odom");
+
+        // 1. Ground segmentation
+        pcl::PointCloud<PointType>::Ptr nonground(new pcl::PointCloud<PointType>());
+        pcl::PointCloud<PointType>::Ptr ground(new pcl::PointCloud<PointType>());
+        double patchwork_process_time;
+        m_patchwork->estimate_ground(*extractedCloud, *ground, *nonground, patchwork_process_time);
+        publishCloud(&pub_ground_cloud, ground, cloudHeader.stamp, "base_link");
+        publishCloud(&pub_nonground_cloud, nonground, cloudHeader.stamp, "base_link");
+        printf("[Query] Ground: %d, Nonground: %d, time: %f\n", (int)ground->points.size(), (int)nonground->points.size(), patchwork_process_time);
+        
+        // 2. Reorder points so that nonground points come first
+        pcl::PointCloud<PointType>::Ptr ordered(new pcl::PointCloud<PointType>());
+        ordered->reserve(extractedCloud->points.size());
+        size_t nonground_size = nonground->points.size();
+        for (const auto p : nonground->points) 
+            ordered->points.push_back(p);
+
+        for (const auto p : ground->points) 
+            ordered->points.push_back(p);
+
+        // 3. Find transform
+        static tf::TransformListener listener;
+        static tf::StampedTransform init_transform;
+
+        try{
+            listener.waitForTransform("odom", "base_link", cloudHeader.stamp, ros::Duration(0.01));
+            listener.lookupTransform("odom", "base_link", cloudHeader.stamp, init_transform);
+        } 
+        catch (tf::TransformException ex){
+            ROS_ERROR("no imu tf");
+            return;
+        }
+
+        TicToc voxel_time;
+        // // 3. Voxel and filter
+        // pcl::PointCloud<PointType>::Ptr cloud_filtered(new pcl::PointCloud<PointType>());
+        // static pcl::PassThrough<PointType> pass;
+        // pass.setInputCloud(nonground);
+        // pass.setFilterFieldName("z");
+        // pass.setFilterLimits(minZ, maxZ);
+        // pass.filter(*cloud_filtered);
+        // printf("After z filter: %d\n", (int)cloud_filtered->points.size());
+        // *nonground = *cloud_filtered;
+
+        pcl::PointCloud<PointType>::Ptr nonground_ds(new pcl::PointCloud<PointType>());
+        pcl::PointCloud<PointType>::Ptr nonground_local_ds(new pcl::PointCloud<PointType>());
+
+        static pcl::VoxelGrid<PointType> downsize_filter;
+        downsize_filter.setSaveLeafLayout(true);
+        downsize_filter.setLeafSize(nongroundDownsample, nongroundDownsample, nongroundDownsample);
+        downsize_filter.setInputCloud(nonground);
+        downsize_filter.filter(*nonground_ds);
+        ROS_WARN("Voxelize: %f ms", voxel_time.toc());
+        printf("After voxelized (%f m): %d\n", nongroundDownsample, (int)nonground_ds->points.size());
+        *nonground_local_ds = *nonground_ds;
+
+        // 4. Get initial pose
+        double xCur, yCur, zCur, rollCur, pitchCur, yawCur;
+        xCur = init_transform.getOrigin().x();
+        yCur = init_transform.getOrigin().y();
+        zCur = init_transform.getOrigin().z();
+        tf::Matrix3x3 init_m(init_transform.getRotation());
+        init_m.getRPY(rollCur, pitchCur, yawCur);
+        Eigen::Affine3f pose = pcl::getTransformation(xCur, yCur, zCur, rollCur, pitchCur, yawCur);
+        pcl::transformPointCloud(*nonground_ds, *nonground_ds, pose);
+        publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, "odom");
+
+        // 5. Clustering and fitting box
+        meas_map.buildMap(nonground_ds, used_id_cnt);
+        publishBoundingBox(&pub_bbox, meas_map, cloudHeader.stamp, "odom");
+
+        // 6. Init tracking
+        TicToc tracking_time;
+        std::vector<Cluster> meas_clusters = meas_map.getMap();
+        int const n_targets = (int)meas_clusters.size();
+
+        if (!tracker_flag)
+        {
+            gmphd::GaussianModel<4> birth;
+            birth.m_weight = weightBirth; // 0.2
+            birth.m_mean(0, 0) = meanXBirth; // 400.0
+            birth.m_mean(1, 0) = meanYBirth; // 400.0
+            birth.m_mean(2, 0) = 0.f;
+            birth.m_mean(3, 0) = 0.f;
+            birth.m_cov = MatrixXf::Identity(4, 4);
+            birth.m_cov(0,0) *= varPoseBirth;
+            birth.m_cov(1,1) *= varPoseBirth;
+            birth.m_cov(2,2) *= varVelBirth;
+            birth.m_cov(3,3) *= varVelBirth;
+            gmphd::GaussianMixture<4> birth_model({birth});
+            target_tracker.setBirthModel(birth_model);
+
+            // Dynamics (motion model)
+            target_tracker.setDynamicsModel(samplingPeriod, processNoise);
+
+            // Detection model
+            float const meas_background = 1 - detectionProb; // false detection prob
+            // target_tracker.setObservationModel(detectionProb, measPoseNoise, measSpeedNoise, meas_background);
+            target_tracker.setObservationModel2(detectionProb, measPoseNoise, meas_background);
+
+            // Pruning parameters
+            target_tracker.setPruningParameters(pruneThres, pruneMergeThres, maxGaussian);
+
+            // Spawn
+            gmphd::SpawningModel<4> spawn_model;
+            spawn_model.m_cov(0,0) = spawnPoseNoise;
+            spawn_model.m_cov(1,1) = spawnPoseNoise;
+            spawn_model.m_cov(2,2) = spawnVelNoise;
+            spawn_model.m_cov(3,3) = spawnVelNoise;
+            std::vector<gmphd::SpawningModel<4>> spawns = {spawn_model};
+            target_tracker.setSpawnModel(spawns);
+
+            // Survival over time
+            target_tracker.setSurvivalProbability(survivalProb); 
+
+            tracker_flag = true;        
+        }
+
+        // 7. Set measurements and propagate
+        std::vector<gmphd::Target<2>> target_meas;
+        Eigen::Matrix<float, 2, 1> measurements;
+        int detected = 0;
+        for (int i = 0; i < n_targets; ++i)
+        {
+            if (meas_clusters[i].bbox.value >= 0)
+            {
+                measurements[0] = meas_clusters[i].bbox.pose.position.x;
+                measurements[1] = meas_clusters[i].bbox.pose.position.y;
+                target_meas.push_back({.position=measurements, .speed={0., 0.}, .weight=1., .id=meas_clusters[i].id});
+                detected++;
+            }
+        }
+    
+        printf("Detections: %d out of %d\n", detected, (int)meas_clusters.size());
+        target_tracker.setNewMeasurements(target_meas);
+        target_tracker.propagate();
+
+        // 8. Get tracker
+        const auto tracked = target_tracker.getTrackedTargets2(minWeightTrack);
+        
+        tracker_map.clear();
+        std::vector<Cluster> track_clusters;
+        std::map<int, Cluster> track_clusters_map;
+        printf("Tracked\n");
+        for (size_t i = 0; i < tracked.size(); i++)
+        {
+            Cluster cluster;
+            cluster.id = tracked[i].id;
+            cluster.centroid_x = tracked[i].position[0];
+            cluster.centroid_y = tracked[i].position[1];
+            cluster.feature = sqrt(pow(tracked[i].speed[0], 2) + pow(tracked[i].speed[1], 2));
+            cluster.vel_x = tracked[i].speed[0];
+            cluster.vel_y = tracked[i].speed[1];
+            cluster.mode = tracked[i].type;
+            cluster.prob = tracked[i].prob;
+            cluster.weight = tracked[i].weight;
+            track_clusters.push_back(cluster);
+            track_clusters_map.insert(std::make_pair(cluster.id, cluster));
+            printf("id: %d, type: %d, prob: %f\n", tracked[i].id, tracked[i].type, tracked[i].prob);
+            printf("pos: %f;%f;%f, vel: %f;%f, weight: %f\n", tracked[i].id, tracked[i].position[0], tracked[i].position[1], 0.0, tracked[i].speed[0], tracked[i].speed[1], tracked[i].weight);
+        }
+        printf("meas size: %d, tracked size: %d\n", (int)target_meas.size(), (int)tracked.size());
+        ROS_WARN("Tracking time: %f ms", tracking_time.toc());
+        tracker_map.setMap(track_clusters);
+        publishClusteredCloud(&pub_meas_cluster, &pub_meas_centroid, &pub_meas_cluster_info, meas_map, cloudHeader.stamp, "odom");
+        publishClusteredCloud(&pub_tracker_cluster, &pub_tracker_centroid, &pub_tracker_cluster_info, tracker_map, cloudHeader.stamp, "odom");
+    
+        // 9. Removal
+        std::map<int, int> tracker_to_meas = target_tracker.getAssociationMap();
+        dynamicRemoval(tracker_to_meas, meas_clusters, track_clusters_map, nonground_local_ds, ordered, downsize_filter, nonground_size);        
+        *extractedCloud = *ordered;
+        pcl::transformPointCloud(*ordered, *ordered, pose);
+        publishCloud(&pub_static_scene, ordered, cloudHeader.stamp, "odom");
+    }
+
+    void dynamicRemoval(std::map<int, int> association_map,
+                        std::vector<Cluster> meas_clusters,
+                        std::map<int, Cluster> cluster_by_id, 
+                        pcl::PointCloud<PointType>::Ptr downsampled, 
+                        pcl::PointCloud<PointType>::Ptr removed, 
+                        pcl::VoxelGrid<PointType> filter, 
+                        size_t nonground_size) {
+        
+        TicToc tic_toc;
+
+        std::vector<pcl::PointIndices> cluster_indices = meas_map.getClusterIndices();
+        std::map<int, int> id_to_idx = meas_map.getIdToIdxMap();
+        printf("--Removal: %d\n", (int)association_map.size());
+        // Set points in a measurement cluster to its corresponding tracker's mode probability
+        size_t clustered_cloud = 0;
+        for (const auto c : meas_clusters) {
+            clustered_cloud += c.cloud.points.size();
+            size_t cluster_index = id_to_idx[c.id];
+            std::vector<int> indices = cluster_indices.at(cluster_index).indices; // indices of clustered points in the original pointcloud 
+            
+            bool is_static = false;
+
+            if (c.bbox.value >= 0) { // bounding-boxed
+                // get associated tracker
+                Cluster tracker;
+                for (auto &element : association_map) {
+                    if (element.second == c.id) {
+                        tracker = cluster_by_id[element.first];
+                        break;
+                    }
+                }
+
+                // filter points by probability
+                if (tracker.id >= 0) {
+                    float speed = sqrt(tracker.vel_x * tracker.vel_x + tracker.vel_y * tracker.vel_y);
+                    printf("Meas: %d Tracker: %d Mode: %d prob: %f\n", c.id, tracker.id, tracker.mode, tracker.prob);
+                    if ( (tracker.mode == 0 && tracker.prob >= modeProbThres) || 
+                        (tracker.mode == 1 && tracker.prob < modeProbThres)) { // very static or not dynamic enough
+                        if (speed < velThres) {
+                            printf("Cluster is static\n");
+                            is_static = true;
+                        }
+                    } else if (tracker.mode == -1) { // birth
+                        is_static = true;
+                    }
+                } else { // Not found in the tracker
+                    printf("No tracker to the mesurement\n");
+                    is_static = true;
+                }
+            } else {
+                printf("Not bounding boxed measurement\n");
+                is_static = true;
+            }
+
+            if (is_static) {
+                for (auto &idx : indices) {
+                    downsampled->points[idx].intensity = 1.0;
+                }
+            }
+        }
+
+        // preserve points with static label (upsample)
+        pcl::PointCloud<PointType>::Ptr static_cloud(new pcl::PointCloud<PointType>());
+        static_cloud->reserve(removed->points.size());
+        for (size_t j = 0u; j < removed->points.size(); ++j) {
+            PointType p = removed->points[j];
+            if (j < nonground_size) {
+                int voxel_index = filter.getCentroidIndex(p);
+                if (voxel_index < 0) continue;
+                if (downsampled->points[voxel_index].intensity == 1.0)
+                    static_cloud->points.push_back(p);
+            } else {
+                static_cloud->points.push_back(p);
+            }
+        }
+        printf("Downsampled: %d, Static: %d, Original: %d, After-removal: %d\n", (int)downsampled->points.size(), (int)clustered_cloud, (int)removed->points.size(), (int)static_cloud->points.size());
+        *removed = *static_cloud;
+        ROS_WARN("Dynamic removal: %f ms", tic_toc.toc());
     }
 
     void publishClusteredCloud(ros::Publisher *thisPubCloud, ros::Publisher *thisPubCentroid, ros::Publisher *thisPubInfo, ClusterMap map, ros::Time thisStamp, string thisFrame)
@@ -902,9 +1203,6 @@ public:
                 visualization_msgs::Marker id;
                 id.header.frame_id = thisFrame;
                 id.scale.z = 0.8;
-                id.color.r = 1.0;
-                id.color.g = 0.0;
-                id.color.b = 0.0;
                 id.color.a = 1.0;
                 id.action = 0;
                 id.type = 9; // TEXT_VIEW_FACING
@@ -914,12 +1212,27 @@ public:
                 id.pose.position.y = centroid.y;
                 id.pose.position.z = centroid.z;
                 id.pose.orientation.w = 1.0;
+
+                if (cluster.mode == 0){
+                    id.color.r = 1.0;
+                    id.color.g = 0.0;
+                    id.color.b = 0.0;
+                } else if (cluster.mode == 1){
+                    id.color.r = 0.0;
+                    id.color.g = 0.0;
+                    id.color.b = 1.0;
+                } else {
+                    id.color.a = 0.0;
+                }
                 ids.markers.push_back(id);
 
                 std::ostringstream stream;
                 stream.precision(2);
                 stream << "vx: " << cluster.vel_x << "\n"
-                        << "vy: " << cluster.vel_y << "\n";
+                        << "vy: " << cluster.vel_y << "\n"
+                        << "mode: " << cluster.mode << "\n"
+                        << "P: " << cluster.prob << "\n"
+                        << "W: " << cluster.weight << "\n";
                 std::string new_string = stream.str();
 
                 visualization_msgs::Marker text;
@@ -930,11 +1243,13 @@ public:
                 text.color.b = 1.0;
                 text.color.a = 1.0;
                 text.action = 0;
+                if (cluster.mode == -1) 
+                    text.color.a = 0.0;
                 text.type = 9; // TEXT_VIEW_FACING
                 text.id = 2*cluster_map.size() + i;
                 text.text = new_string;
-                text.pose.position.x = centroid.x - 0.3;
-                text.pose.position.y = centroid.y - 0.3;
+                text.pose.position.x = centroid.x - 0.6;
+                text.pose.position.y = centroid.y - 0.6;
                 text.pose.position.z = centroid.z;
                 text.pose.orientation.w = 1.0;
                 ids.markers.push_back(text);

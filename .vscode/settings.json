@@ -10,6 +10,19 @@
         "*.tcc": "cpp",
         "unordered_map": "cpp",
         "unordered_set": "cpp",
-        "initializer_list": "cpp"
-    }
+        "initializer_list": "cpp",
+        "array": "cpp",
+        "bitset": "cpp",
+        "string_view": "cpp",
+        "hash_map": "cpp",
+        "hash_set": "cpp",
+        "ranges": "cpp",
+        "utility": "cpp"
+    },
+    "python.analysis.extraPaths": [
+        "/home/euigon/liosam_ws/devel/lib/python2.7/dist-packages",
+        "/home/euigon/lig_ws/devel/lib/python2.7/dist-packages",
+        "/opt/ros/melodic/lib/python2.7/dist-packages"
+    ],
+    "ros.distro": "melodic"
 }

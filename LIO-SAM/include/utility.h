@@ -167,15 +167,23 @@ public:
     int minClusterSize;
     int maxClusterSize;
 
+    // removal
+    float velThres;
+    float modeProbThres;
+
     // filter
     float meanXBirth;
     float meanYBirth;
+    float varPoseBirth;
+    float varVelBirth;
     float weightBirth;
     float samplingPeriod;
     float processNoise;
     float detectionProb;
     float measPoseNoise;
     float measSpeedNoise;
+    float spawnPoseNoise;
+    float spawnVelNoise;
     float pruneThres;
     float pruneMergeThres;
     int maxGaussian;
@@ -294,12 +302,16 @@ public:
         
         nh.param<float>(  "tracking/filter/meanXBirth", meanXBirth, 1e3);
         nh.param<float>(  "tracking/filter/meanYBirth", meanYBirth, 10.0);
+        nh.param<float>(  "tracking/filter/varPoseBirth", varPoseBirth, 10.0);
+        nh.param<float>(  "tracking/filter/varVelBirth", varVelBirth, 10.0);
         nh.param<float>(  "tracking/filter/weightBirth", weightBirth, 10.0);
         nh.param<float>(  "tracking/filter/samplingPeriod", samplingPeriod, 1.0);
         nh.param<float>(  "tracking/filter/processNoise", processNoise, 10.0);
         nh.param<float>(  "tracking/filter/detectionProb", detectionProb, 10.0);
         nh.param<float>(  "tracking/filter/measPoseNoise", measPoseNoise, 10.0);
         nh.param<float>(  "tracking/filter/measSpeedNoise", measSpeedNoise, 10.0);
+        nh.param<float>(  "tracking/filter/spawnPoseNoise", spawnPoseNoise, 10.0);
+        nh.param<float>(  "tracking/filter/spawnVelNoise", spawnVelNoise, 10.0);
         nh.param<float>(  "tracking/filter/pruneThres", pruneThres, 10.0);
         nh.param<float>(  "tracking/filter/pruneMergeThres", pruneMergeThres, 10.0);
         nh.param<int>  (  "tracking/filter/maxGaussian", maxGaussian, 150);
@@ -311,6 +323,9 @@ public:
         nh.param<float>(  "tracking/lshape/maxArea", maxArea, 10.0);
         nh.param<float>(  "tracking/lshape/maxRatio", maxRatio, 1.0);
         nh.param<float>(  "tracking/lshape/minDensity", minDensity, 10.0);
+
+        nh.param<float>("removal/velTrhes", velThres, 0.3);
+        nh.param<float>("removal/modeProbThres", modeProbThres, 0.7);
 
         nh.param<std::string>("rosbag/type", dataType, "normal");
         usleep(100);

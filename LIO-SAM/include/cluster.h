@@ -32,9 +32,16 @@ public:
     float m_max_ratio;
     float m_min_density;
 
+    int mode;
+    float prob;
+    float weight;
     Cluster()
     {
         bbox.value = -1.0;
+        mode = -1;
+        prob = 0.0;
+        weight = 0.0;
+        id = -1;
         cloud.reserve(10000);
     }
 
@@ -49,6 +56,10 @@ public:
         m_ratio = -1.0;
         vel_x = 0.0;
         vel_y = 0.0;
+        mode = -1;
+        prob = 0.0;
+        weight = 0.0;
+        id = -1;
     }
 
     void calculateCentroid()
@@ -147,6 +158,8 @@ private:
     float max_area_;
     float max_ratio_;
     float min_density_;
+
+    std::map<int, int> id_to_idx_;
     
 public:
     ClusterMap(){}
@@ -154,8 +167,11 @@ public:
     Type getType() {return type_;}
     void setType(Type type) {type_ = type;}
 
-    std::vector<Cluster>getMap(){return cluster_map_;}
+    std::vector<Cluster> getMap(){return cluster_map_;}
     void setMap(std::vector<Cluster> cluster_map) {cluster_map_ = cluster_map;}
+    
+    std::map<int, int> getIdToIdxMap() {return id_to_idx_;}
+    
     std::vector<pcl::PointIndices> getClusterIndices(){return cluster_indices_;}
     
     void clear() { cluster_map_.clear();}
@@ -212,10 +228,12 @@ public:
     void addClusters(std::vector<pcl::PointIndices> clusters, int &start_id)
     {
         TicToc tic_toc;
+        id_to_idx_.clear();
         for (size_t i = 0u; i < clusters.size(); ++i)
         {
             Cluster cluster(min_height_, max_height_, max_area_, max_ratio_, min_density_);
             cluster.id = (int) start_id++;
+            id_to_idx_[cluster.id] = i;
             std::vector<int> indices = clusters[i].indices;
             for (size_t j = 0u; j <indices.size(); ++j)
             {

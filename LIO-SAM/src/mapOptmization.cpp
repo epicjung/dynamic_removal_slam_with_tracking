@@ -65,6 +65,8 @@ public:
     ros::Publisher pubLaserOdometryIncremental;
     ros::Publisher pubKeyPoses;
     ros::Publisher pubPath;
+    ros::Publisher pubSurfFromMap;
+    ros::Publisher pubCornerFromMap;
 
     ros::Publisher pubHistoryKeyFrames;
     ros::Publisher pubIcpKeyFrames;
@@ -178,6 +180,9 @@ public:
         pubRecentKeyFrames    = nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/map_local", 1);
         pubRecentKeyFrame     = nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/cloud_registered", 1);
         pubCloudRegisteredRaw = nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/cloud_registered_raw", 1);
+        
+        pubSurfFromMap        = nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/surface", 1);
+        pubCornerFromMap      = nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/corner", 1);
 
         downSizeFilterCorner.setLeafSize(mappingCornerLeafSize, mappingCornerLeafSize, mappingCornerLeafSize);
         downSizeFilterSurf.setLeafSize(mappingSurfLeafSize, mappingSurfLeafSize, mappingSurfLeafSize);
@@ -918,6 +923,9 @@ public:
             }
             
         }
+
+        publishCloud(&pubSurfFromMap, laserCloudSurfFromMap, timeLaserInfoStamp, odometryFrame);
+        publishCloud(&pubCornerFromMap, laserCloudCornerFromMap, timeLaserInfoStamp, odometryFrame);
 
         // Downsample the surrounding corner key frames (or map)
         downSizeFilterCorner.setInputCloud(laserCloudCornerFromMap);

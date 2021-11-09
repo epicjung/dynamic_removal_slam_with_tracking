@@ -17,9 +17,13 @@ namespace gmphd
     SpawningModel()
     {
       m_trans.setIdentity();
-      m_cov.setIdentity() * 20;
+      m_trans(2,2) = 0.0;
+      m_trans(3,3) = 0.0;
+      m_cov.setIdentity();
       m_offset.setZero();
-      m_weight = 0.9f;
+      m_weight = 1.0f;
+      // m_cov *= 120;
+      m_cov *= 1e-24;
     }
 
     float m_weight;
@@ -74,6 +78,8 @@ namespace gmphd
       m_extractedTargets.reset(new GaussianMixture<S>());
       m_spawnTargets.reset(new GaussianMixture<S>());
       m_tempTargets.reset(new GaussianMixture<S>());
+
+      associated.clear();
 
       // IMM
       frame_count = 0;
@@ -139,6 +145,10 @@ namespace gmphd
       return targets;
     }
 
+    std::map<int, int> getAssociationMap() {
+      return associated;
+    }
+
     // Parameters to set before use
     void setDynamicsModel(float sampling, float processNoise)
     {
@@ -201,6 +211,18 @@ namespace gmphd
       m_obsCov.template bottomRightCorner<D, D>() *= m_measNoiseSpeed * m_measNoiseSpeed;
     }
 
+    void setObservationModel2(float probDetectionOverall, float measNoisePose, float measNoiseBackground){
+      m_pDetection = probDetectionOverall;
+      m_measNoisePose = measNoisePose;
+      m_measNoiseBackground = measNoiseBackground;
+      m_obsMat2 = Matrix<float, D, S>::Zero();
+      m_obsMat2(0,0) = 1.0;
+      m_obsMat2(1,1) = 1.0;
+      m_obsMat2T = m_obsMat2.transpose();
+      m_obsCov2.setIdentity();
+      m_obsCov2 *= m_measNoisePose * m_measNoisePose;
+    }
+
     void setPruningParameters(float prune_trunc_thld, float prune_merge_thld,
                               int prune_max_nb)
     {
@@ -237,6 +259,9 @@ namespace gmphd
         Pr(1) = m_currTargets->m_gaussians2[k].model_prob;  
         X.col(0) = m_currTargets->m_gaussians[k].m_mean;
         X.col(1) = m_currTargets->m_gaussians2[k].m_mean;
+        printf("State Interaction -- id: %d\n", m_currTargets->m_gaussians[k].m_track_id);
+        printf("Dyna b4: %f;%f;%f;%f cov: %f;%f;%f;%f\n", X(0,0), X(1, 0), X(2, 0), X(3, 0), m_currTargets->m_gaussians[k].m_cov(0,0), m_currTargets->m_gaussians[k].m_cov(1,1), m_currTargets->m_gaussians[k].m_cov(2,2), m_currTargets->m_gaussians[k].m_cov(3,3));
+        printf("Sta b4: %f;%f;%f;%f cov: %f; %f;%f;%f\n", X(0,1), X(1, 1), X(2, 1), X(3, 1), m_currTargets->m_gaussians2[k].m_cov(0,0), m_currTargets->m_gaussians2[k].m_cov(1,1), m_currTargets->m_gaussians2[k].m_cov(2,2), m_currTargets->m_gaussians2[k].m_cov(3,3));
         for (size_t j = 0; j < M; j++)
         {
           for (size_t i = 0; i < M; i++)
@@ -246,8 +271,11 @@ namespace gmphd
         }
         m_currTargets->m_gaussians[k].c = C(0);
         m_currTargets->m_gaussians2[k].c = C(1);
-        printf("D_prob: %f, S_prob: %f\n", C(0), C(1));
-        
+        printf("D_C: %f, S_C: %f\n", C(0), C(1));
+        printf("D_P: %f, S_P: %f\n", Pr(0), Pr(1));
+        printf("mode: \n");
+        cout << m_mode_trans << endl;
+
         MatrixXf tmp = X;
         X.fill(0);
         for (size_t j = 0; j < M; j++) {
@@ -257,27 +285,55 @@ namespace gmphd
           }
         }
 
-        for (size_t i = 0; i < M; i++) {
+        for (size_t j = 0; j < M; j++) {
           Eigen::MatrixXf P = Eigen::MatrixXf::Zero(S, S);
-          if (i == 0)
+          if (j == 0)
           {
-            for (size_t j = 0; j < M; j++) {
-              Eigen::VectorXf s = tmp.col(i) - X.col(j);
-              P += U(i, j) * (m_currTargets->m_gaussians[k].m_cov + s * s.transpose());
-            }
+            Eigen::VectorXf s0 = tmp.col(0) - X.col(j);
+            Eigen::VectorXf s1 = tmp.col(1) - X.col(j);
+            printf("Mu: %f d-d error: %f %f %f %f; Mu: %f s-d error: %f %f %f %f\n", U(0,j), s0(0), s0(1), s0(2), s0(3), U(1,j), s1(0), s1(1), s1(2), s1(3));
+            P += U(0, j) * (m_currTargets->m_gaussians[k].m_cov + s0 * s0.transpose());
+            P += U(1, j) * (m_currTargets->m_gaussians2[k].m_cov + s1* s1.transpose());
             m_currTargets->m_gaussians[k].m_cov = P;
-            m_currTargets->m_gaussians[k].m_mean = X.col(i);
+            m_currTargets->m_gaussians[k].m_mean = X.col(j);
           }
           else
           {
-            for (size_t j = 0; j < M; j++) {
-              Eigen::VectorXf s = tmp.col(i) - X.col(j);
-              P += U(i, j) * (m_currTargets->m_gaussians2[k].m_cov + s * s.transpose());
-            }
+            Eigen::VectorXf s0 = tmp.col(0) - X.col(j);
+            Eigen::VectorXf s1 = tmp.col(1) - X.col(j);
+            printf("Mu: %f d-s error: %f %f %f %f; Mu: %f s-s error: %f %f %f %f\n", U(0,j), s0(0), s0(1), s0(2), s0(3), U(1,j), s1(0), s1(1), s1(2), s1(3));
+            P += U(0, j) * (m_currTargets->m_gaussians[k].m_cov + s0 * s0.transpose());
+            P += U(1, j) * (m_currTargets->m_gaussians2[k].m_cov + s1* s1.transpose());
             m_currTargets->m_gaussians2[k].m_cov = P;
-            m_currTargets->m_gaussians2[k].m_mean = X.col(i);
+            m_currTargets->m_gaussians2[k].m_mean = X.col(j);
           }
         }
+
+        // for (size_t i = 0; i < M; i++) {
+        //   Eigen::MatrixXf P = Eigen::MatrixXf::Zero(S, S);
+        //   if (i == 0)
+        //   {
+        //     for (size_t j = 0; j < M; j++) {
+        //       Eigen::VectorXf s = tmp.col(i) - X.col(j);
+        //       printf("Mu: %f Dynamic error: %f %f %f %f\n", U(i,j), s(0), s(1), s(2), s(3));
+        //       P += U(i, j) * (m_currTargets->m_gaussians[k].m_cov + s * s.transpose());
+        //     }
+        //     m_currTargets->m_gaussians[k].m_cov = P;
+        //     m_currTargets->m_gaussians[k].m_mean = X.col(i);
+        //   }
+        //   else
+        //   {
+        //     for (size_t j = 0; j < M; j++) {
+        //       Eigen::VectorXf s = tmp.col(i) - X.col(j);
+        //       printf("Mu: %f Static error: %f %f %f %f\n", U(i,j), s(0), s(1), s(2), s(3));
+        //       P += U(i, j) * (m_currTargets->m_gaussians2[k].m_cov + s * s.transpose());
+        //     }
+        //     m_currTargets->m_gaussians2[k].m_cov = P;
+        //     m_currTargets->m_gaussians2[k].m_mean = X.col(i);
+        //   }
+        // }
+        printf("Dyna after: %f;%f;%f;%f cov: %f;%f;%f;%f\n", X(0,0), X(1, 0), X(2, 0), X(3, 0), m_currTargets->m_gaussians[k].m_cov(0,0), m_currTargets->m_gaussians[k].m_cov(1,1), m_currTargets->m_gaussians[k].m_cov(2,2), m_currTargets->m_gaussians[k].m_cov(3,3));
+        printf("Sta after: %f;%f;%f;%f cov: %f; %f;%f;%f\n", X(0,1), X(1, 1), X(2, 1), X(3, 1), m_currTargets->m_gaussians2[k].m_cov(0,0), m_currTargets->m_gaussians2[k].m_cov(1,1), m_currTargets->m_gaussians2[k].m_cov(2,2), m_currTargets->m_gaussians2[k].m_cov(3,3));
       }
     }
 
@@ -298,6 +354,8 @@ namespace gmphd
 
     void estimateFusion() 
     {
+      m_currTargets->m_fusedGaussians.clear();
+
       for (size_t i = 0; i < m_currTargets->m_gaussians.size(); ++i)
       {
         GaussianModel<S> fused;
@@ -315,13 +373,15 @@ namespace gmphd
           fused.model_type = m_currTargets->m_gaussians2[i].model_type;
           fused.model_prob = m_currTargets->m_gaussians2[i].model_prob;
         }
-        printf("Fusion -- id: %d, type: %d, prob: %f\n", fused.m_track_id, fused.model_type, fused.model_prob);
         for (size_t j = 0; j < S; ++j)
         {
           fused.m_mean[j] = m_currTargets->m_gaussians[i].m_mean[j] * m_currTargets->m_gaussians[i].model_prob + 
                             m_currTargets->m_gaussians2[i].m_mean[j] * m_currTargets->m_gaussians2[i].model_prob;
         }
-        m_currTargets->m_fusedGaussians.emplace_back(std::move(fused));
+        printf("Fusion -- id: %d, type: %d, prob: %f\n", fused.m_track_id, fused.model_type, fused.model_prob);
+        printf("Dyna: %f;%f;%f;%f  Sta: %f;%f;%f;%f\n", m_currTargets->m_gaussians[i].m_mean[0], m_currTargets->m_gaussians[i].m_mean[1], m_currTargets->m_gaussians[i].m_mean[2], m_currTargets->m_gaussians[i].m_mean[3],
+        m_currTargets->m_gaussians2[i].m_mean[0], m_currTargets->m_gaussians2[i].m_mean[1], m_currTargets->m_gaussians2[i].m_mean[2], m_currTargets->m_gaussians2[i].m_mean[3]);
+        m_currTargets->m_fusedGaussians.emplace_back(fused);
       }
       assert(m_currTargets->m_gaussians.size() == m_currTargets->m_fusedGaussians.size());
       assert(m_currTargets->m_gaussians2.size() == m_currTargets->m_fusedGaussians.size());
@@ -337,16 +397,16 @@ namespace gmphd
       stateInteraction();
 
       // Predict new targets (spawns):
-      predictBirth();
+      predictBirth2();
 
       // Predict propagation of expected targets
-      predictTargets();
+      predictTargets2();
 
       // Build the update components
       buildUpdate();
 
       // Update the probabilities
-      update();
+      update2();
 
       // sort by decreasing weights
       size_t target_num = m_currTargets->m_gaussians.size();
@@ -355,14 +415,19 @@ namespace gmphd
       std::iota(ordered_indices.begin(), ordered_indices.end(), 0);
       std::stable_sort(ordered_indices.begin(), ordered_indices.end(), 
         [&gaussians](size_t i1, size_t i2){return gaussians[i1].m_weight > gaussians[i2].m_weight;});
+      
+      printf("After after normalized\n");
+      for (size_t i = 0; i < m_currTargets->m_gaussians.size(); ++i){
+        printf("Meas idx: %d\n", i / m_expTargets->m_gaussians.size());
+        printf("id: %d weights: %f\n", m_currTargets->m_gaussians[i].m_track_id, m_currTargets->m_gaussians[i].m_weight);
+      }
 
       // Association
       // associate(ordered_indices);
 
       myPruneGaussians2(ordered_indices);
 
-      if (frame_count > 1)
-        updateModelProb();
+      updateModelProb();
 
       // IMM State Fusion
       estimateFusion();
@@ -376,6 +441,10 @@ namespace gmphd
       m_uncertainty.clear();
       m_covariance.clear();
 
+      m_expMeasure2.clear();
+      m_expDisp2.clear();
+      m_uncertainty2.clear();
+      m_covariance2.clear();
       // Show trackers
       showTrackerList();
     }
@@ -446,7 +515,7 @@ namespace gmphd
 
     void myPruneGaussians2(const std::vector<size_t> indices)
     {
-      std::map<int, int> associated;
+      associated.clear();
       GaussianMixture<S> pruned_targets;
       pruned_targets.m_gaussians.clear(); // dynamic
       pruned_targets.m_gaussians2.clear(); // static
@@ -467,8 +536,11 @@ namespace gmphd
         int t_best = m_currTargets->m_gaussians[i_best].model_type;
         int t_corres = m_currTargets->m_gaussians[i_corres].model_type;
         int track_id = m_currTargets->m_gaussians[i_best].m_track_id;
+        float c_best = m_currTargets->m_gaussians[i_best].c;
+        float c_corres = m_currTargets->m_gaussians[i_corres].c;
         printf("---id: %d, best: %d, corres: %d\n", m_currTargets->m_gaussians[i_best].m_track_id, t_best, t_corres);
         printf("b_idx: %d, b_weight: %f, c_idx: %d, c_weight: %f\n", i_best, m_currTargets->m_gaussians[i_best].m_weight, i_corres, m_currTargets->m_gaussians[i_corres].m_weight);
+        printf("x: %f; y: %f; vx: %f; vy: %f\n", m_currTargets->m_gaussians[i_best].m_mean[0], m_currTargets->m_gaussians[i_best].m_mean[1], m_currTargets->m_gaussians[i_best].m_mean[2], m_currTargets->m_gaussians[i_best].m_mean[3]);
         if (merge_checker[i_best]) {
           printf("%d already merged\n", i_best);
           continue;
@@ -488,6 +560,10 @@ namespace gmphd
           track_id = m_currTargets->m_gaussians[i_best].m_track_id;
           best_model = m_currTargets->m_gaussians[i_best];
           corres_model = m_currTargets->m_gaussians[i_corres];
+          corres_model.m_track_id = track_id;
+          assert(corres_model.m_track_id == best_model.m_track_id);
+          best_model.c = c_best;
+          corres_model.c = c_corres;
           // pruned_targets.m_gaussians.emplace_back(std::move(best_model));
           // pruned_targets.m_gaussians2.emplace_back(std::move(corres_model));
         }
@@ -505,7 +581,7 @@ namespace gmphd
           i_close_to_corres.push_back(i_corres);
           
           merge_checker[i_best] = true;
-          merge_cnt++;
+          // merge_cnt++;
 
           for (size_t j = 0; j < target_gaussians.size(); ++j)
           {
@@ -526,40 +602,31 @@ namespace gmphd
                 {
                   merge_checker[j] = true;
                   merge_cnt++;
-                  // printf("compared id: %d; %f; %f %f %f; dist: %f\n", target_gaussians[j].m_track_id, target_gaussians[j].m_weight, target_gaussians[j].m_mean[0], target_gaussians[j].m_mean[1], 0.0, gauss_distance);
+                  printf("compared id: %d; %f; %f %f %f; dist: %f\n", target_gaussians[j].m_track_id, target_gaussians[j].m_weight, target_gaussians[j].m_mean[0], target_gaussians[j].m_mean[1], 0.0, gauss_distance);
                   i_close_to_best.push_back(j);
                   i_close_to_corres.push_back(getCorrespondingIndex(j));
                 }
               }
             }
           }
-          printf("curr tracker: %d; %f %f %f; best type: %d\n", track_id, target_gaussians[i_best].m_mean[0], target_gaussians[i_best].m_mean[1], 0.0, target_gaussians[i_best].model_type);
-          ROS_WARN("Find closest: %f ms\n", closest_time.toc());
+          printf("curr tracker: %d; %f %f %f %f; best type: %d\n", track_id, target_gaussians[i_best].m_mean[0], target_gaussians[i_best].m_mean[1], target_gaussians[i_best].m_mean[2], target_gaussians[i_best].m_mean[3], target_gaussians[i_best].model_type);
+          // ROS_WARN("Find closest: %f ms\n", closest_time.toc());
 
           // Merge close gaussians
           TicToc merge_time;
 
-          best_model = target_gaussians[i_close_to_best[0]];
-          corres_model = target_gaussians[i_close_to_corres[0]];
-
-          assert(i_close_to_corres.size() == i_close_to_best.size());
-          assert(target_gaussians[i_best].m_track_id == target_gaussians[i_corres].m_track_id);
-          assert(i_close_to_best[0] == i_best);
-          assert(i_close_to_corres[0] == i_corres);
-          assert(best_model.model_type == t_best);
-          assert(corres_model.model_type == t_corres);
-          assert(best_model.c != 0.0);
-          assert(corres_model.c != 0.0);
+          best_model.clear();
+          corres_model.clear();
 
           if (i_close_to_best.size() > 1 && i_close_to_corres.size() > 1)
           {
-            for (size_t j = 1; j < i_close_to_best.size(); j++)
+            for (size_t j = 0; j < i_close_to_best.size(); j++)
             {
               best_model.m_weight += target_gaussians[i_close_to_best[j]].m_weight;
               corres_model.m_weight += target_gaussians[i_close_to_corres[j]].m_weight;
             }
 
-            for (size_t j = 1; j < i_close_to_best.size(); j++)
+            for (size_t j = 0; j < i_close_to_best.size(); j++)
             {
               best_model.m_mean += target_gaussians[i_close_to_best[j]].m_mean * target_gaussians[i_close_to_best[j]].m_weight;
               corres_model.m_mean += target_gaussians[i_close_to_corres[j]].m_mean * target_gaussians[i_close_to_corres[j]].m_weight;
@@ -573,7 +640,7 @@ namespace gmphd
             best_model.m_cov.setZero();
             corres_model.m_cov.setZero();
 
-            for (size_t j = 1; j < i_close_to_best.size(); j++)
+            for (size_t j = 0; j < i_close_to_best.size(); j++)
             {
               Matrix<float, S, 1> diff = best_model.m_mean - target_gaussians[i_close_to_best[j]].m_mean;
               best_model.m_cov += target_gaussians[i_close_to_best[j]].m_weight * (target_gaussians[i_close_to_best[j]].m_cov + diff * diff.transpose());
@@ -585,17 +652,36 @@ namespace gmphd
               best_model.m_cov /= best_model.m_weight;
             if (corres_model.m_weight != 0.f)
               corres_model.m_cov /= corres_model.m_weight;
-            assert(best_model.model_type == t_best);
-            assert(corres_model.model_type == t_corres);
+          } else {
+            best_model = target_gaussians[i_close_to_best[0]];
+            corres_model = target_gaussians[i_close_to_corres[0]];
           }
 
-          ROS_WARN("Insert merged time: %f ms", merge_time.toc());
+          best_model.model_type = t_best;
+          corres_model.model_type = t_corres;
+          best_model.m_track_id = track_id;
+          corres_model.m_track_id = track_id;
+          best_model.c = c_best;
+          corres_model.c = c_corres;
+
+          assert(i_close_to_corres.size() == i_close_to_best.size());
+          assert(target_gaussians[i_best].m_track_id == target_gaussians[i_corres].m_track_id);
+          assert(i_close_to_best[0] == i_best);
+          assert(i_close_to_corres[0] == i_corres);
+          assert(best_model.model_type == t_best);
+          assert(corres_model.model_type == t_corres);
+          assert(best_model.c != 0.0);
+          assert(corres_model.c != 0.0);
+
+          // ROS_WARN("Insert merged time: %f ms", merge_time.toc());
         }
 
         // add survived tracker = propagated + birth + not propagated
         if (i_best < n_tracker)
         {
-          printf("Survived tracker: %d type: %d; weight:%f; %f %f 0.0\n", track_id, best_model.model_type, best_model.m_weight, best_model.m_mean[0], best_model.m_mean[1]);
+          printf("Survived track id: %d\n", track_id);
+          printf("type: %d, track weight: %f, %f %f %f %f\n", best_model.model_type, best_model.m_weight, best_model.m_mean[0], best_model.m_mean[1], best_model.m_cov(0,0), best_model.m_cov(1,1));
+          printf("type: %d, track weight: %f, %f %f %f %f\n", corres_model.model_type, corres_model.m_weight, corres_model.m_mean[0], corres_model.m_mean[1], corres_model.m_cov(0,0), corres_model.m_cov(1,1));
           if (associated.find(track_id) == associated.end())
           {
             associated.insert(std::make_pair(track_id, -1));
@@ -638,7 +724,10 @@ namespace gmphd
         {
           size_t i_meas = (i_best - n_tracker) / n_tracker;
           int meas_id = m_measTargets->m_gaussians[i_meas].m_track_id;
-          printf("New track_id: %d, meas_id: %d, type: %d, track weight: %f; %f %f 0.0\n", track_id, meas_id, best_model.model_type, best_model.m_weight, best_model.m_mean[0], best_model.m_mean[1]);
+          printf("New track_id: %d, meas_id: %d\n", track_id, meas_id);
+          printf("type: %d, id: %d, track weight: %f, %f %f %f %f\n", best_model.model_type, best_model.m_track_id, best_model.m_weight, best_model.m_mean[0], best_model.m_mean[1], best_model.m_cov(0,0), best_model.m_cov(1,1));
+          printf("type: %d, id: %d, track weight: %f, %f %f %f %f\n", corres_model.model_type, corres_model.m_track_id, corres_model.m_weight, corres_model.m_mean[0], corres_model.m_mean[1], corres_model.m_cov(0,0), corres_model.m_cov(1,1));
+
           if (associated.find(track_id) == associated.end()) // new tracker
           {
             addTracker(best_model);
@@ -677,7 +766,6 @@ namespace gmphd
             printf("Already associated\n");       
           }          
         }
-
           // printf("Last added best model: %d\n", pruned_targets.m_gaussians.back().model_type);
 
         if (pruned_targets.m_gaussians.size() > m_nMaxPrune)
@@ -698,15 +786,17 @@ namespace gmphd
           size_t gauss_idx = m_nPredTargets * k + birth_idx;
           // printf("Birth idx: %d, Gauss_idx: %d, exp size: %d\n", birth_idx, gauss_idx, m_expTargets->m_gaussians.size());
           GaussianModel<S> birth_gaussian = m_currTargets->m_gaussians[gauss_idx];
-          // printf("Meas id: %d, %f;%f;0.0   birth gaussian: %d, %f; %f; 0.0   weight: %f\n", 
-          //   meas_id, m_measTargets->m_gaussians[k].m_mean[0], m_measTargets->m_gaussians[k].m_mean[1],
-          //   birth_gaussian.m_track_id, birth_gaussian.m_mean[0], birth_gaussian.m_mean[1], birth_gaussian.m_weight);
+
           birth_gaussian.m_track_id = m_ntrack++;
           birth_gaussian.m_weight = birth_gaussian.m_weight < 0.2f ? 0.2f: birth_gaussian.m_weight;
           assert(birth_gaussian.model_type == -1);
           assert(birth_gaussian.c != 0.0);
+          assert(birth_gaussian.m_track_id >= 0);
           pruned_targets.m_gaussians.emplace_back(birth_gaussian);
           pruned_targets.m_gaussians2.emplace_back(birth_gaussian);
+            printf("Meas id: %d, %f;%f;0.0   birth gaussian: %d, %f; %f; 0.0   weight: %f\n", 
+          meas_id, m_measTargets->m_gaussians[k].m_mean[0], m_measTargets->m_gaussians[k].m_mean[1],
+          birth_gaussian.m_track_id, birth_gaussian.m_mean[0], birth_gaussian.m_mean[1], birth_gaussian.m_weight);
         }
       }
 
@@ -775,7 +865,7 @@ namespace gmphd
           Matrix<float, D, D> cov;
           i_close_to_best.push_back(i_best);
           merge_checker[i_best] = true;
-          merge_cnt++;
+          // merge_cnt++;
           for (size_t j = 0; j < target_gaussians.size(); ++j)
           {
             if (j != i_best && !merge_checker[j])
@@ -803,7 +893,7 @@ namespace gmphd
             }
           }
           printf("curr tracker: %d; %f %f %f ;size: %d\n", track_id, target_gaussians[i_best].m_mean[0], target_gaussians[i_best].m_mean[1], 0.0, (int)i_close_to_best.size());
-          ROS_WARN("Find closest: %f ms\n", closest_time.toc());
+          // ROS_WARN("Find closest: %f ms\n", closest_time.toc());
           // merge gaussians
           TicToc merge_time;
 
@@ -901,7 +991,6 @@ namespace gmphd
 
     void buildUpdate()
     {
-
       // Concatenate all the wannabe targets :
       // - birth targets
       if (m_birthTargets->m_gaussians.size() > 0)
@@ -922,29 +1011,66 @@ namespace gmphd
       // Compute PHD update components (for every expected target)
       m_nPredTargets = m_expTargets->m_gaussians.size();
       printf("Number of predicted targets: %d\n", m_nPredTargets);
-      m_expMeasure.clear();
-      m_expMeasure.reserve(m_nPredTargets);
+      // m_expMeasure.clear();
+      // m_expMeasure.reserve(m_nPredTargets);
 
-      m_expDisp.clear();
-      m_expDisp.reserve(m_nPredTargets);
+      // m_expDisp.clear();
+      // m_expDisp.reserve(m_nPredTargets);
 
-      m_uncertainty.clear();
-      m_uncertainty.reserve(m_nPredTargets);
+      // m_uncertainty.clear();
+      // m_uncertainty.reserve(m_nPredTargets);
 
-      m_covariance.clear();
-      m_covariance.reserve(m_nPredTargets);
+      // m_covariance.clear();
+      // m_covariance.reserve(m_nPredTargets);
 
+      m_expMeasure2.clear();
+      m_expMeasure2.reserve(m_nPredTargets);
+
+      m_expDisp2.clear();
+      m_expDisp2.reserve(m_nPredTargets);
+
+      m_uncertainty2.clear();
+      m_uncertainty2.reserve(m_nPredTargets);
+
+      m_covariance2.clear();
+      m_covariance2.reserve(m_nPredTargets);
+
+      // printf("Observation cov: %f %f %f %f\n", m_obsCov(0,0), m_obsCov(1,1), m_obsCov(2,2), m_obsCov(3,3));
+      // for (auto const &tgt : m_expTargets->m_gaussians)
+      // {
+      //   // Compute the expected measurement
+      //   m_expMeasure.push_back(m_obsMat * tgt.m_mean);
+      //   m_expDisp.push_back(m_obsCov + m_obsMat * tgt.m_cov * m_obsMatT);
+      //   m_uncertainty.push_back(tgt.m_cov * m_obsMatT * m_expDisp.back().inverse());
+      //   m_covariance.push_back((Matrix<float, S, S>::Identity() - m_uncertainty.back() * m_obsMat) * tgt.m_cov);
+      //   printf("Expected: -- id: %d, tgt cov: %f;%f;%f;%f\n", tgt.m_track_id, tgt.m_cov(0,0), tgt.m_cov(1,1), tgt.m_cov(2,2), tgt.m_cov(3,3));
+      //   printf("expMeas: %f %f %f %f\n",m_expMeasure.back()[0], m_expMeasure.back()[1], m_expMeasure.back()[2], m_expMeasure.back()[3]);
+      //   printf("expDisp: %f %f %f %f\n",m_expDisp.back()(0,0), m_expDisp.back()(1,1), m_expDisp.back()(2,2), m_expDisp.back()(3,3));
+      //   printf("m_cov: %f %f %f %f\n", m_covariance.back()(0,0), m_covariance.back()(1,1), m_covariance.back()(2,2), m_covariance.back()(3,3));
+      //   // printf("Expected: %f;%f; vel: %f; %f; id: %d\n", m_expMeasure.back()[0], m_expMeasure.back()[1], m_expMeasure.back()[2], m_expMeasure.back()[3], tgt.m_track_id);
+      // }
+
+      // observation2
+      printf("Observation cov: %f %f\n", m_obsCov2(0,0), m_obsCov2(1,1));
       for (auto const &tgt : m_expTargets->m_gaussians)
       {
         // Compute the expected measurement
-        m_expMeasure.push_back(m_obsMat * tgt.m_mean);
-        m_expDisp.push_back(m_obsCov + m_obsMat * tgt.m_cov * m_obsMatT);
-        m_uncertainty.push_back(tgt.m_cov * m_obsMatT * m_expDisp.back().inverse());
-        m_covariance.push_back((Matrix<float, S, S>::Identity() - m_uncertainty.back() * m_obsMat) * tgt.m_cov);
-        printf("Expected: %f;%f; %f;%f; vel: %f; %f; id: %d\n", m_expMeasure.back()[0], m_expMeasure.back()[1], m_covariance.back()(0,0), m_covariance.back()(1,1), m_uncertainty.back()(0,0), m_uncertainty.back()(1,1), tgt.m_track_id);
+        m_expMeasure2.push_back(m_obsMat2 * tgt.m_mean); // <D, 1> : H*xp
+        m_expDisp2.push_back(m_obsCov2 + m_obsMat2 * tgt.m_cov * m_obsMat2T); // <D, D> : R + H*Pp*H'
+        m_uncertainty2.push_back(tgt.m_cov * m_obsMat2T * m_expDisp2.back().inverse()); // <S, D> : K = P*H'*inv(expDisp)
+        m_covariance2.push_back((Matrix<float, S, S>::Identity() - m_uncertainty2.back() * m_obsMat2) * tgt.m_cov); // <S, D>
+        Matrix<float, S, D> PpH = tgt.m_cov * m_obsMat2T;
+        printf("Expected: -- id: %d; %f %f %f %f\n", tgt.m_track_id, tgt.m_mean[0], tgt.m_mean[1], tgt.m_mean[2], tgt.m_mean[3]);
+        cout << "Pp: " << endl << tgt.m_cov << endl;
+        cout << "Hx: " << endl << m_expMeasure2.back() << endl;
+        cout << "R+H*Pp*H':" << endl << m_expDisp2.back() << endl;
+        cout << "PpH'" << endl << PpH << endl;
+        cout << "K: " << endl << m_uncertainty2.back() << endl;
+        cout << "P: " << endl << m_covariance2.back() << endl;
       }
-    }
 
+    }
+    
     void predictBirth()
     {
       m_spawnTargets->m_gaussians.clear();
@@ -987,11 +1113,55 @@ namespace gmphd
       printf("\n");
     }
 
+    void predictBirth2()
+    {
+      m_spawnTargets->m_gaussians.clear();
+      m_birthTargets->m_gaussians.clear();
+
+      // -----------------------------------------
+      // Compute spontaneous births
+      m_birthTargets->m_gaussians = m_birthModel->m_gaussians;
+
+      m_nPredTargets += m_birthTargets->m_gaussians.size();
+
+      // -----------------------------------------
+      // Compute spawned targets
+      printf("Spawn: \n");
+      for (auto const &curr : m_currTargets->m_gaussians2) // static object
+      {
+        for (auto const &spawn : m_spawnModels)
+        {
+          GaussianModel<S> new_spawn;
+
+          // Define a gaussian model from the existing target
+          // and spawning properties
+          // new_spawn.m_weight = curr.m_weight * spawn.m_weight;
+          new_spawn.m_weight = m_pSurvival * curr.m_weight;
+          new_spawn.m_mean = spawn.m_offset + spawn.m_trans * curr.m_mean;
+          new_spawn.m_cov = spawn.m_cov + spawn.m_trans * curr.m_cov * spawn.m_trans.transpose();
+          // new_spawn.m_isFalseTarget = true;
+          new_spawn.m_track_id = curr.m_track_id;
+          new_spawn.model_prob = curr.model_prob;
+          new_spawn.model_type = 0; // static
+          new_spawn.c = curr.c;
+          printf("id: %d; %f %f %f %f; %f %f %f %f\n", new_spawn.m_track_id, 
+          curr.m_cov(0, 0), curr.m_cov(1,1), curr.m_cov(2,2), curr.m_cov(3,3),
+          new_spawn.m_cov(0,0), new_spawn.m_cov(1,1), new_spawn.m_cov(2,2), new_spawn.m_cov(3,3));
+          // Add this new gaussian to the list of expected targets
+          m_spawnTargets->m_gaussians.push_back(new_spawn);
+          ++m_nSpawned;
+          // Update the number of expected targets
+          ++m_nPredTargets;
+        }
+      }
+      printf("\n");
+    }
+
     void predictTargets()
     {
       m_expTargets->m_gaussians.clear();
       m_expTargets->m_gaussians.reserve(m_currTargets->m_gaussians.size());
-      printf("Targets ");
+      printf("Targets: \n");
       for (auto const &curr : m_currTargets->m_gaussians)
       {
         // Compute the new shape of the target
@@ -1011,6 +1181,32 @@ namespace gmphd
       }
       printf("\n");
     }
+
+    void predictTargets2()
+    {
+      m_expTargets->m_gaussians.clear();
+      m_expTargets->m_gaussians.reserve(m_currTargets->m_gaussians.size());
+      printf("Targets: \n");
+      for (auto const &curr : m_currTargets->m_gaussians) // dynamic objects
+      {
+        // Compute the new shape of the target
+        GaussianModel<S> new_target;
+        new_target.m_weight = m_pSurvival * curr.m_weight;
+        new_target.m_mean = m_tgtDynTrans * curr.m_mean;
+        new_target.m_cov = m_tgtDynCov + m_tgtDynTrans * curr.m_cov * m_tgtDynTrans.transpose();
+        new_target.m_track_id = curr.m_track_id;
+        new_target.model_prob = curr.model_prob;
+        new_target.model_type = 1; // constant velocity
+        new_target.c = curr.c;
+        printf("id: %d, %f %f %f %f\n", new_target.m_track_id, new_target.m_cov(0,0), new_target.m_cov(1,1), new_target.m_cov(2,2), new_target.m_cov(3,3));
+        // Push back to the expected targets
+        m_expTargets->m_gaussians.push_back(new_target);
+        ++m_nPredTargets;
+        ++m_nPropagated;
+      }
+      printf("\n");
+    }
+    
 
     void pruneGaussians()
     {
@@ -1039,7 +1235,6 @@ namespace gmphd
     {
       m_currTargets->m_gaussians.clear();
       m_currTargets->m_gaussians2.clear();
-      m_currTargets->m_fusedGaussians.clear();
       // We'll consider every possible association : std::vector size is (expected targets)*(measured targets)
       m_currTargets->m_gaussians.reserve((m_measTargets->m_gaussians.size() + 1) *
                                          m_expTargets->m_gaussians.size());
@@ -1084,7 +1279,6 @@ namespace gmphd
                                m_uncertainty[n_targt] * (measuredTarget.m_mean - m_expMeasure[n_targt]);
 
           matchTarget.m_cov = m_covariance[n_targt];
-          // matchTarget.m_track_id = m_ntrack++;
           matchTarget.m_track_id = m_expTargets->m_gaussians[n_targt].m_track_id;
           // matchTarget.model_prob = 00; // TO-DO
           matchTarget.model_type = m_expTargets->m_gaussians[n_targt].model_type;
@@ -1103,6 +1297,134 @@ namespace gmphd
         // Normalize weights in the same predicted set, taking clutter into account
         m_currTargets->normalize(m_measNoiseBackground, start_normalize,
                                  m_currTargets->m_gaussians.size(), 1);
+      }
+      printf("CurrTargets num: %d\n", (int)m_currTargets->m_gaussians.size());
+      // print
+      printf("Unassociated\n");
+      int meas_idx = -1;
+      for (size_t i = 0; i < m_currTargets->m_gaussians.size(); ++i)
+      {
+        if (m_currTargets->m_gaussians[i].m_track_id < 0)
+        {
+          if (meas_idx < 0){
+            meas_idx++;
+            continue;
+          } else {
+            printf("meas_id: %d, loc: %f;%f;0.0, weight: %f\n", 
+              m_measTargets->m_gaussians[meas_idx].m_track_id, 
+              m_measTargets->m_gaussians[meas_idx].m_mean[0],
+              m_measTargets->m_gaussians[meas_idx].m_mean[1],
+              m_currTargets->m_gaussians[i].m_weight);
+            meas_idx++;
+          }            
+        }
+      }
+    }
+    
+    void update2()
+    {
+      m_currTargets->m_gaussians.clear();
+      m_currTargets->m_gaussians2.clear();
+      // We'll consider every possible association : std::vector size is (expected targets)*(measured targets)
+      m_currTargets->m_gaussians.reserve((m_measTargets->m_gaussians.size() + 1) *
+                                         m_expTargets->m_gaussians.size());
+      // m_currTargets->m_gaussians.reserve((m_measTargets->m_gaussians.size()) *
+      //                                    m_expTargets->m_gaussians.size());
+
+      printf("Update - meas %d, exp: %d\n", (int)m_measTargets->m_gaussians.size(), (int)m_expTargets->m_gaussians.size());
+
+      // First set of gaussians : mere propagation of existing ones
+      // don't propagate the "birth" targets... we set their weight to 0
+
+      for (auto const &target : m_expTargets->m_gaussians)
+      {
+        // Copy the target into the final set, adjust the weight if it was spawned
+        auto newTarget = target;
+        // newTarget.m_weight = target.m_isFalseTarget ? 0.f : (1.f - m_pDetection) * target.m_weight;
+        newTarget.m_weight = target.m_isFalseTarget ? 0.f : 0.3 * target.m_weight;
+        newTarget.m_track_id = target.m_track_id;
+        newTarget.model_prob = target.model_prob;
+        newTarget.model_type = target.model_type;
+        newTarget.c = target.c;
+        m_currTargets->m_gaussians.emplace_back(std::move(newTarget));
+      }
+
+      uint cur_id = 0;
+      uint meas_cnt = 0;
+      std::vector<int> best_indices;
+      // Second set of gaussians : match observations and previsions
+      for (auto &measuredTarget : m_measTargets->m_gaussians)
+      {
+        uint start_normalize = m_currTargets->m_gaussians.size();
+        printf("Measurement association: %d\n", meas_cnt);
+        meas_cnt++;
+        for (uint n_targt = 0; n_targt < m_expTargets->m_gaussians.size(); ++n_targt)
+        {
+
+          // Compute matching factor between predictions and measures (2)
+          const auto distance = mahalanobis<2>(measuredTarget.m_mean.template head<D>(),
+                                               m_expMeasure2[n_targt],
+                                               m_expDisp2[n_targt]);
+          GaussianModel<S> matchTarget;
+
+          matchTarget.m_weight = m_pDetection * m_expTargets->m_gaussians[n_targt].m_weight / distance;
+
+          matchTarget.m_mean = m_expTargets->m_gaussians[n_targt].m_mean +
+                               m_uncertainty2[n_targt] * (measuredTarget.m_mean.template head<D>() - m_expMeasure2[n_targt]);
+
+          matchTarget.m_cov = m_covariance2[n_targt];
+          matchTarget.m_track_id = m_expTargets->m_gaussians[n_targt].m_track_id;
+          // matchTarget.model_prob = 00; // TO-DO
+          matchTarget.model_type = m_expTargets->m_gaussians[n_targt].model_type;
+          matchTarget.c = m_expTargets->m_gaussians[n_targt].c;
+          printf("matched -- id: %d, distance: %f, weight: %f\n", matchTarget.m_track_id, distance, matchTarget.m_weight);
+          printf("target mean: %f;%f;%f;%f\n", m_expTargets->m_gaussians[n_targt].m_mean[0], m_expTargets->m_gaussians[n_targt].m_mean[1], m_expTargets->m_gaussians[n_targt].m_mean[2],m_expTargets->m_gaussians[n_targt].m_mean[3]);
+          printf("target cov: %f %f %f %f\n", m_expTargets->m_gaussians[n_targt].m_cov(0,0), m_expTargets->m_gaussians[n_targt].m_cov(1, 1), m_expTargets->m_gaussians[n_targt].m_cov(2,2), m_expTargets->m_gaussians[n_targt].m_cov(3,3));
+          printf("meas mean: %f;%f;%f;%f;\n", measuredTarget.m_mean[0], measuredTarget.m_mean[1], measuredTarget.m_mean[2], measuredTarget.m_mean[3]);
+          printf("updated mean: %f;%f;%f;%f\n", matchTarget.m_mean[0], matchTarget.m_mean[1], matchTarget.m_mean[2], matchTarget.m_mean[3]);
+          printf("updated cov: %f %f %f %f\n", matchTarget.m_cov(0,0),matchTarget.m_cov(1,1), matchTarget.m_cov(2,2), matchTarget.m_cov(3,3));
+          // printf("distance: %f, weight: %f, mean: %f;%f\n", distance, m_expTargets->m_gaussians[n_targt].m_weight, matchTarget.m_mean[0], matchTarget.m_mean[1]);
+
+          m_currTargets->m_gaussians.emplace_back(std::move(matchTarget));
+
+          // // Compute matching factor between predictions and measures.
+          // const auto distance = mahalanobis<2>(measuredTarget.m_mean.template head<D>(),
+          //                                      m_expMeasure[n_targt].template head<D>(),
+          //                                      m_expDisp[n_targt].template topLeftCorner<D, D>());
+          // GaussianModel<S> matchTarget;
+
+          // matchTarget.m_weight = m_pDetection * m_expTargets->m_gaussians[n_targt].m_weight / distance;
+
+          // matchTarget.m_mean = m_expTargets->m_gaussians[n_targt].m_mean +
+          //                      m_uncertainty[n_targt] * (measuredTarget.m_mean - m_expMeasure[n_targt]);
+
+          // matchTarget.m_cov = m_covariance[n_targt];
+          // matchTarget.m_track_id = m_expTargets->m_gaussians[n_targt].m_track_id;
+          // // matchTarget.model_prob = 00; // TO-DO
+          // matchTarget.model_type = m_expTargets->m_gaussians[n_targt].model_type;
+          // matchTarget.c = m_expTargets->m_gaussians[n_targt].c;
+          // printf("matched -- id: %d, distance: %f, weight: %f\n", matchTarget.m_track_id, distance, matchTarget.m_weight);
+          // printf("exp target: %f;%f;%f;%f\n", m_expTargets->m_gaussians[n_targt].m_mean[0], m_expTargets->m_gaussians[n_targt].m_mean[1], m_expTargets->m_gaussians[n_targt].m_mean[2],m_expTargets->m_gaussians[n_targt].m_mean[3]);
+          // printf("meas mean: %f;%f;%f;%f, expMeasure: %f;%f;%f;%f ", measuredTarget.m_mean[0], measuredTarget.m_mean[1], measuredTarget.m_mean[2], measuredTarget.m_mean[3], m_expMeasure[n_targt][0], m_expMeasure[n_targt][1], m_expMeasure[n_targt][2], m_expMeasure[n_targt][3]);
+          // printf("expDisp: %f; %f;\n", m_expDisp[n_targt](0,0), m_expDisp[n_targt](1,1));
+          // // printf("diff: %f; %f; %f; %f\n", measuredTarget.m_mean[0] - m_expMeasure[n_targt][0], measuredTarget.m_mean[1]-m_expMeasure[n_targt][1], measuredTarget.m_mean[2]-m_expMeasure[n_targt][2], measuredTarget.m_mean[3]-m_expMeasure[n_targt][3]);
+          // // std::cout << "cov: " << std::endl;
+          // // std::cout << m_uncertainty[n_targt] <<std::endl;
+          // printf("matched mean: %f;%f;%f;%f\n", matchTarget.m_mean[0], matchTarget.m_mean[1], matchTarget.m_mean[2], matchTarget.m_mean[3]);
+          // // printf("distance: %f, weight: %f, mean: %f;%f\n", distance, m_expTargets->m_gaussians[n_targt].m_weight, matchTarget.m_mean[0], matchTarget.m_mean[1]);
+
+          // m_currTargets->m_gaussians.emplace_back(std::move(matchTarget));
+        }
+        cur_id++;
+        // Normalize weights in the same predicted set, taking clutter into account
+        m_currTargets->normalize(m_measNoiseBackground, start_normalize,
+                                 m_currTargets->m_gaussians.size(), 1);
+        // printf("After normalized\n");
+        
+        // for (size_t t = start_normalize; t < m_currTargets->m_gaussians.size(); t++)
+        // {
+        //   printf("---id: %d, weight: %f, %f;%f;%f;%f\n", m_currTargets->m_gaussians[t].m_track_id, m_currTargets->m_gaussians[t].m_weight, m_currTargets->m_gaussians[t].m_mean[0], m_currTargets->m_gaussians[t].m_mean[1], m_currTargets->m_gaussians[t].m_mean[2], m_currTargets->m_gaussians[t].m_mean[3]);
+        // }
       }
       printf("CurrTargets num: %d\n", (int)m_currTargets->m_gaussians.size());
       // print
@@ -1167,11 +1489,20 @@ namespace gmphd
     Matrix<float, S, S> m_obsMatT;
     Matrix<float, S, S> m_obsCov;
 
+    Matrix<float, D, S> m_obsMat2;
+    Matrix<float, S, D> m_obsMat2T;
+    Matrix<float, D, D> m_obsCov2; 
+
     // Temporary matrices, used for the update process
     std::vector<Matrix<float, S, S>> m_covariance;
     std::vector<Matrix<float, S, 1>> m_expMeasure;
     std::vector<Matrix<float, S, S>> m_expDisp;
     std::vector<Matrix<float, S, S>> m_uncertainty;
+
+    std::vector<Matrix<float, S, S>> m_covariance2;
+    std::vector<Matrix<float, D, 1>> m_expMeasure2;
+    std::vector<Matrix<float, D, D>> m_expDisp2;
+    std::vector<Matrix<float, S, D>> m_uncertainty2;
 
     std::unique_ptr<GaussianMixture<S>> m_birthModel;
 
@@ -1185,9 +1516,9 @@ namespace gmphd
 
     int m_nPropagated;
     int m_nSpawned;
-
     int frame_count;
     list<TrackerPerId<D>> trackerList;
     Matrix<float, M, M> m_mode_trans;
+    std::map<int, int> associated;
   };
 }

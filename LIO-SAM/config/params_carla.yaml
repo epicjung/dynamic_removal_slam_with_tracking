@@ -59,7 +59,7 @@ lio_sam:
   # voxel filter paprams
   odometrySurfLeafSize: 0.4                     # default: 0.4 - outdoor, 0.2 - indoor
   mappingCornerLeafSize: 0.2                    # default: 0.2 - outdoor, 0.1 - indoor
-  mappingSurfLeafSize: 0.4                      # default: 0.4 - outdoor, 0.2 - indoor
+  mappingSurfLeafSize: 0.2                      # default: 0.4 - outdoor, 0.2 - indoor
 
   # robot motion constraint (in case you are using a 2D robot)
   z_tollerance: 1000                            # meters
@@ -104,28 +104,36 @@ tracking:
 
   # GMPHD filter
   filter:
-    meanXBirth: 10000.0
-    meanYBirth: 10000.0
+    meanXBirth: 500.0
+    meanYBirth: 500.0
+    varPoseBirth: 2500
+    varVelBirth: 2500
     weightBirth: 0.2
     samplingPeriod: 0.1
-    processNoise: 5.0
-    detectionProb: 0.98
+    processNoise: 1e-12
+    spawnPoseNoise: 90 # opt: 100
+    spawnVelNoise: 50 # opt: 50
+    detectionProb: 1.0
     measPoseNoise: 1.0
     measSpeedNoise: 4.0
     pruneThres: 0.2
-    pruneMergeThres: 0.005
+    pruneMergeThres: 0.0008
     maxGaussian: 150
-    survivalProb: 0.5
+    survivalProb: 1.0
     minWeightTrack: 0.2
 
   # L-Shape fitting
   lshape:
     minHeight: 0.5
     maxHeight: 3.0
-    maxArea: 20.0
-    maxRatio: 10.0
+    maxArea: 15.0
+    maxRatio: 9.0
     minDensity: 3.0
 
+  # Dynamic removal
+  removal:
+    velThres: 0.3
+    modeProbThres: 0.7
 
 # Navsat (convert GPS coordinates to Cartesian)
 navsat:
