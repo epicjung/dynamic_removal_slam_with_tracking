@@ -106,17 +106,17 @@ tracking:
   filter:
     meanXBirth: 10000.0
     meanYBirth: 10000.0
-    weightBirth: 0.2
+    weightBirth: 0.1
     samplingPeriod: 0.1
     processNoise: 5.0
     detectionProb: 0.98
     measPoseNoise: 1.0
     measSpeedNoise: 4.0
-    pruneThres: 0.2
+    pruneThres: 0.1
     pruneMergeThres: 0.005
     maxGaussian: 150
     survivalProb: 0.5
-    minWeightTrack: 0.2
+    minWeightTrack: 0.1
 
   # L-Shape fitting
   lshape:

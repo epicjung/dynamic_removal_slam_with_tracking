@@ -225,8 +225,6 @@ public:
         if (!deskewInfo())
             return;
 
-        tracking();
-
         projectPointCloud();
 
         cloudExtraction();
@@ -234,6 +232,28 @@ public:
         publishClouds();
 
         resetParameters();
+    }
+
+    size_t getRowIndex(float x, float y, float z, std::vector<float> angles) {
+        float verticalAngle = atan2(z, sqrt(x*x + y*y))*180/M_PI;
+        auto iter_geq = std::lower_bound(angles.begin(), angles.end(), verticalAngle);
+        size_t rowInd;
+
+        if (iter_geq == angles.begin())
+        {
+            rowInd = 0;
+        }
+        else
+        {
+            float a = *(iter_geq - 1);
+            float b = *(iter_geq);
+            if (fabs(verticalAngle-a) < fabs(verticalAngle-b)){
+                rowInd = iter_geq - angles.begin() - 1;
+            } else {
+                rowInd = iter_geq - angles.begin();
+            }
+        }
+        return rowInd;
     }
 
     bool cachePointCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
@@ -256,14 +276,21 @@ public:
             // Convert to Velodyne format
             pcl::moveFromROSMsg(currentCloudMsg, *tmpOusterCloudIn);
             laserCloudIn->points.resize(tmpOusterCloudIn->size());
+            laserCloudInRaw->points.resize(tmpOusterCloudIn->size());
             laserCloudIn->is_dense = tmpOusterCloudIn->is_dense;
+            laserCloudInRaw->is_dense = tmpOusterCloudIn->is_dense;
             for (size_t i = 0; i < tmpOusterCloudIn->size(); i++)
             {
                 auto &src = tmpOusterCloudIn->points[i];
                 auto &dst = laserCloudIn->points[i];
+                auto &dst_raw = laserCloudInRaw->points[i];
                 dst.x = src.x;
                 dst.y = src.y;
                 dst.z = src.z;
+                dst_raw.x = src.x;
+                dst_raw.y = src.y;
+                dst_raw.z = src.z;
+                dst_raw.intensity = src.intensity;
                 dst.intensity = src.intensity;
                 dst.ring = src.ring;
                 dst.time = src.t * 1e-9f;
@@ -282,57 +309,104 @@ public:
 
         if (dataType == "carla")
         {
-            float verticalAngle, horizonAngle, range;
-            size_t rowInd, columnIdn, index, cloudSize;
-            cloudSize = laserCloudIn->points.size();
-            pcl::PointCloud<PointXYZIRT>::Ptr laserFiltered(new pcl::PointCloud<PointXYZIRT>());
-            
+            // vehicle spec
+            float EGO_WIDTH = 2.17;
+            float EGO_LENGTH = 4.809;
+
+            // sensor spec
             std::vector<float> angles;
             float resolution = (maxVertAngle - minVertAngle) / (N_SCAN-1);
             for(int a = 0; a < N_SCAN; a++)
                 angles.push_back(minVertAngle + a*resolution);
-            
 
-            float EGO_WIDTH = 2.17;
-            float EGO_LENGTH = 4.809;
-
-            for (pcl::PointCloud<PointXYZIRT>::iterator it = laserCloudIn->begin(); it != laserCloudIn->end(); it++)
-            {
-                if (isnan(it->x) || isnan(it->y) || isnan(it->z))
-                {
-                }
-                else if((it->y >= -EGO_WIDTH/2.0 && it->y <= EGO_WIDTH/2.0) && (it->x <= EGO_LENGTH / 2.0 + 0.2 && it->x >= -EGO_LENGTH / 2.0 + 0.2))  // remove pointcloud for ego vehicle
-                {
-                }
-                else
-                {
-                    PointXYZIRT thisPoint;
-                    thisPoint.x = it->x;
-                    thisPoint.y = it->y;
-                    thisPoint.z = it->z;
-                    verticalAngle = atan2(thisPoint.z, sqrt(thisPoint.x*thisPoint.x + thisPoint.y*thisPoint.y))*180/M_PI;
-                    auto iter_geq = std::lower_bound(angles.begin(), angles.end(), verticalAngle);
-                    if (iter_geq == angles.begin())
-                    {
-                        rowInd = 0;
-                    }
-                    else
-                    {
-                        float a = *(iter_geq - 1);
-                        float b = *(iter_geq);
-                        if (fabs(verticalAngle-a) < fabs(verticalAngle-b)){
-                            rowInd = iter_geq - angles.begin() - 1;
-                        } else {
-                            rowInd = iter_geq - angles.begin();
-                        }
-                    }                    
-                    it->ring = rowInd;
-                    laserFiltered->points.push_back(*it);
+            // remove NaN; remove inside vehicle; downsample
+            pcl::PointCloud<PointType>::Ptr filtered(new pcl::PointCloud<PointType>());
+            for (pcl::PointCloud<PointType>::iterator it = laserCloudInRaw->begin(); it != laserCloudInRaw->end(); it++) {
+                bool inside = (it->y >= -EGO_WIDTH/2.0 && it->y <= EGO_WIDTH/2.0) && (it->x <= EGO_LENGTH / 2.0 + 0.2 && it->x >= -EGO_LENGTH / 2.0 + 0.2);
+                size_t row_idx = getRowIndex(it->x, it->y, it->z, angles);
+                
+                if (!(isnan(it->x) || isnan(it->y) || isnan(it->z)) || !inside) {
+                    if (row_idx % downsampleRate != 0)
+                        continue;
+                    filtered->points.push_back(*it);
                 }
             }
-            *laserCloudIn = *laserFiltered;
+            *laserCloudInRaw = *filtered;
+            ROS_WARN("Filtered size: %d\n", filtered->points.size());
+            
+            tracking(laserCloudInRaw); // dynamic removal
+            
+            // create ring info
+            pcl::PointCloud<PointXYZIRT>::Ptr laserRingAdded(new pcl::PointCloud<PointXYZIRT>());
+            for (pcl::PointCloud<PointType>::iterator it = laserCloudInRaw->begin(); it != laserCloudInRaw->end(); it++)
+            {
+                PointXYZIRT thisPoint;
+                thisPoint.x = it->x;
+                thisPoint.y = it->y;
+                thisPoint.z = it->z; 
+                thisPoint.ring = getRowIndex(thisPoint.x, thisPoint.y, thisPoint.z, angles);                    
+                thisPoint.intensity = it->intensity;
+                laserRingAdded->points.push_back(thisPoint);
+            }
+            *laserCloudIn = *laserRingAdded;
             laserCloudIn->is_dense = true;
+            ROS_WARN("After removal size: %d\n", laserCloudIn->points.size());
         }
+
+
+        // if (dataType == "carla")
+        // {
+        //     float verticalAngle, horizonAngle, range;
+        //     size_t rowInd, columnIdn, index, cloudSize;
+        //     cloudSize = laserCloudIn->points.size();
+        //     pcl::PointCloud<PointXYZIRT>::Ptr laserFiltered(new pcl::PointCloud<PointXYZIRT>());
+            
+        //     std::vector<float> angles;
+        //     float resolution = (maxVertAngle - minVertAngle) / (N_SCAN-1);
+        //     for(int a = 0; a < N_SCAN; a++)
+        //         angles.push_back(minVertAngle + a*resolution);
+            
+
+        //     float EGO_WIDTH = 2.17;
+        //     float EGO_LENGTH = 4.809;
+
+        //     for (pcl::PointCloud<PointXYZIRT>::iterator it = laserCloudIn->begin(); it != laserCloudIn->end(); it++)
+        //     {
+        //         if (isnan(it->x) || isnan(it->y) || isnan(it->z))
+        //         {
+        //         }
+        //         else if((it->y >= -EGO_WIDTH/2.0 && it->y <= EGO_WIDTH/2.0) && (it->x <= EGO_LENGTH / 2.0 + 0.2 && it->x >= -EGO_LENGTH / 2.0 + 0.2))  // remove pointcloud for ego vehicle
+        //         {
+        //         }
+        //         else
+        //         {
+        //             PointXYZIRT thisPoint;
+        //             thisPoint.x = it->x;
+        //             thisPoint.y = it->y;
+        //             thisPoint.z = it->z;
+        //             verticalAngle = atan2(thisPoint.z, sqrt(thisPoint.x*thisPoint.x + thisPoint.y*thisPoint.y))*180/M_PI;
+        //             auto iter_geq = std::lower_bound(angles.begin(), angles.end(), verticalAngle);
+        //             if (iter_geq == angles.begin())
+        //             {
+        //                 rowInd = 0;
+        //             }
+        //             else
+        //             {
+        //                 float a = *(iter_geq - 1);
+        //                 float b = *(iter_geq);
+        //                 if (fabs(verticalAngle-a) < fabs(verticalAngle-b)){
+        //                     rowInd = iter_geq - angles.begin() - 1;
+        //                 } else {
+        //                     rowInd = iter_geq - angles.begin();
+        //                 }
+        //             }                    
+        //             it->ring = rowInd;
+        //             laserFiltered->points.push_back(*it);
+        //         }
+        //     }
+        //     *laserCloudIn = *laserFiltered;
+        //     laserCloudIn->is_dense = true;
+        // }
 
         // check dense flag
         if (laserCloudIn->is_dense == false)
@@ -710,7 +784,7 @@ public:
         pub_bbox.publish(bbox_array);
     }
 
-       void tracking2()
+    void tracking(pcl::PointCloud<PointType>::Ptr cloud_in)
     {
         static int lidar_count = -1;
         static int used_id_cnt = 0;
@@ -724,14 +798,14 @@ public:
         pcl::PointCloud<PointType>::Ptr nonground(new pcl::PointCloud<PointType>());
         pcl::PointCloud<PointType>::Ptr ground(new pcl::PointCloud<PointType>());
         double patchwork_process_time;
-        m_patchwork->estimate_ground(*extractedCloud, *ground, *nonground, patchwork_process_time);
+        m_patchwork->estimate_ground(*cloud_in, *ground, *nonground, patchwork_process_time);
         publishCloud(&pub_ground_cloud, ground, cloudHeader.stamp, "base_link");
         publishCloud(&pub_nonground_cloud, nonground, cloudHeader.stamp, "base_link");
         printf("[Query] Ground: %d, Nonground: %d, time: %f\n", (int)ground->points.size(), (int)nonground->points.size(), patchwork_process_time);
         
         // 2. Reorder points so that nonground points come first
         pcl::PointCloud<PointType>::Ptr ordered(new pcl::PointCloud<PointType>());
-        ordered->reserve(extractedCloud->points.size());
+        ordered->reserve(cloud_in->points.size());
         size_t nonground_size = nonground->points.size();
         for (const auto p : nonground->points) 
             ordered->points.push_back(p);
@@ -889,7 +963,7 @@ public:
         // 9. Removal
         std::map<int, int> tracker_to_meas = target_tracker.getAssociationMap();
         dynamicRemoval(tracker_to_meas, meas_clusters, track_clusters_map, nonground_local_ds, ordered, downsize_filter, nonground_size);        
-        *extractedCloud = *ordered;
+        *cloud_in = *ordered;
         pcl::transformPointCloud(*ordered, *ordered, pose);
         publishCloud(&pub_static_scene, ordered, cloudHeader.stamp, "odom");
     }
@@ -1090,10 +1164,11 @@ public:
 
         std::vector<pcl::PointIndices> cluster_indices = meas_map.getClusterIndices();
         std::map<int, int> id_to_idx = meas_map.getIdToIdxMap();
-        printf("--Removal: %d\n", (int)association_map.size());
+        printf("--Removal--\n");
         // Set points in a measurement cluster to its corresponding tracker's mode probability
         size_t clustered_cloud = 0;
         for (const auto c : meas_clusters) {
+            printf("meas id: %d\n", (int)c.id);
             clustered_cloud += c.cloud.points.size();
             size_t cluster_index = id_to_idx[c.id];
             std::vector<int> indices = cluster_indices.at(cluster_index).indices; // indices of clustered points in the original pointcloud 

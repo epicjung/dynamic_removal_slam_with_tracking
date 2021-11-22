@@ -17,7 +17,8 @@
         "hash_map": "cpp",
         "hash_set": "cpp",
         "ranges": "cpp",
-        "utility": "cpp"
+        "utility": "cpp",
+        "cmath": "cpp"
     },
     "python.analysis.extraPaths": [
         "/home/euigon/liosam_ws/devel/lib/python2.7/dist-packages",

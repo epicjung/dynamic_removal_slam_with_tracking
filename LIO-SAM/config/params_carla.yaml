@@ -30,7 +30,7 @@ lio_sam:
   Horizon_SCAN: 1800                          # lidar horizontal resolution (Velodyne:1800, Ouster:512,1024,2048)
   downsampleRate: 2                           # default: 1. Downsample your data if too many points. i.e., 16 = 64 / 4, 16 = 16 / 1
   lidarMinRange: 0.1                          # default: 1.0, minimum lidar range to be used
-  lidarMaxRange: 1000.0                       # default: 1000.0, maximum lidar range to be used
+  lidarMaxRange: 50.0                       # default: 1000.0, maximum lidar range to be used
   minAngle: -26.8
   maxAngle: 2.0
   
@@ -59,7 +59,7 @@ lio_sam:
   # voxel filter paprams
   odometrySurfLeafSize: 0.4                     # default: 0.4 - outdoor, 0.2 - indoor
   mappingCornerLeafSize: 0.2                    # default: 0.2 - outdoor, 0.1 - indoor
-  mappingSurfLeafSize: 0.2                      # default: 0.4 - outdoor, 0.2 - indoor
+  mappingSurfLeafSize: 0.4                      # default: 0.4 - outdoor, 0.2 - indoor
 
   # robot motion constraint (in case you are using a 2D robot)
   z_tollerance: 1000                            # meters
@@ -94,12 +94,12 @@ lio_sam:
 # ----------------------
 tracking:
   clustering: 
-    nongroundDownSample: 0.05
+    nongroundDownSample: 0.05 # opt: 0.05
     maxZ: 3.0
     minZ: -10.0
     maxR: 100.0
     clusteringTolerance: 0.5
-    minClusterSize: 7
+    minClusterSize: 4 # opt 4
     maxClusterSize: 5000
 
   # GMPHD filter
@@ -111,20 +111,20 @@ tracking:
     weightBirth: 0.2
     samplingPeriod: 0.1
     processNoise: 1e-12
-    spawnPoseNoise: 90 # opt: 100
+    spawnPoseNoise: 110 # opt: 110
     spawnVelNoise: 50 # opt: 50
     detectionProb: 1.0
     measPoseNoise: 1.0
     measSpeedNoise: 4.0
     pruneThres: 0.2
-    pruneMergeThres: 0.0008
+    pruneMergeThres: 0.0005 # opt: 0.0005
     maxGaussian: 150
     survivalProb: 1.0
-    minWeightTrack: 0.2
+    minWeightTrack: 0.0 # opt: 0.0
 
   # L-Shape fitting
   lshape:
-    minHeight: 0.5
+    minHeight: 0.2 # opt: 0.5
     maxHeight: 3.0
     maxArea: 15.0
     maxRatio: 9.0
