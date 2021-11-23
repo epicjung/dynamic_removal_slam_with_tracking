@@ -239,6 +239,7 @@ public:
             {
                 const size_t index = indices[j];
                 PointType point = cloud_map_->points[index];
+                point.intensity = cluster.id * 10.0;
                 cluster.cloud.points.push_back(point);
             }
             cluster.calculateCentroid();

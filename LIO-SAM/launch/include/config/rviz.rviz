@@ -20,6 +20,8 @@ Panels:
         - /Segmentation1/static1
         - /Segmentation1/nonground_ds1
         - /Segmentation1/Patches1
+        - /evaluation1
+        - /evaluation1/gps1
       Splitter Ratio: 0.5600000023841858
     Tree Height: 662
   - Class: rviz/Selection
@@ -305,8 +307,8 @@ Visualization Manager:
         - Alpha: 1
           Autocompute Intensity Bounds: false
           Autocompute Value Bounds:
-            Max Value: 1.3701107501983643
-            Min Value: -2.114086627960205
+            Max Value: 1.2790049314498901
+            Min Value: -1.968289852142334
             Value: true
           Axis: Z
           Channel Name: intensity
@@ -314,7 +316,7 @@ Visualization Manager:
           Color: 255; 255; 255
           Color Transformer: AxisColor
           Decay Time: 1000
-          Enabled: false
+          Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Max Intensity: 128
@@ -331,7 +333,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: false
+          Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -542,7 +544,7 @@ Visualization Manager:
           Color: 252; 233; 79
           Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: true
+          Enabled: false
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -557,7 +559,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: true
+          Value: false
         - Alpha: 0.6000000238418579
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -587,13 +589,13 @@ Visualization Manager:
           Use rainbow: true
           Value: false
         - Class: rviz/MarkerArray
-          Enabled: true
+          Enabled: false
           Marker Topic: /tracking/lidar/meas_cluster_info
           Name: meas_info
           Namespaces:
-            "": true
+            {}
           Queue Size: 100
-          Value: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -655,7 +657,7 @@ Visualization Manager:
           Marker Topic: /tracking/lidar/tracker_cluster_info
           Name: track_info
           Namespaces:
-            "": true
+            {}
           Queue Size: 100
           Value: true
         - Class: jsk_rviz_plugin/BoundingBoxArray
@@ -801,6 +803,44 @@ Visualization Manager:
           show normal: false
       Enabled: true
       Name: Segmentation
+    - Class: rviz/Group
+      Displays:
+        - Angle Tolerance: 0.10000000149011612
+          Class: rviz/Odometry
+          Covariance:
+            Orientation:
+              Alpha: 0.5
+              Color: 255; 255; 127
+              Color Style: Unique
+              Frame: Local
+              Offset: 1
+              Scale: 1
+              Value: true
+            Position:
+              Alpha: 0.30000001192092896
+              Color: 204; 51; 204
+              Scale: 1
+              Value: true
+            Value: false
+          Enabled: true
+          Keep: 1
+          Name: gps
+          Position Tolerance: 0.10000000149011612
+          Shape:
+            Alpha: 1
+            Axes Length: 1
+            Axes Radius: 0.10000000149011612
+            Color: 255; 25; 0
+            Head Length: 0.30000001192092896
+            Head Radius: 0.10000000149011612
+            Shaft Length: 1
+            Shaft Radius: 0.05000000074505806
+            Value: Axes
+          Topic: /exp/gt_odom
+          Unreliable: false
+          Value: true
+      Enabled: true
+      Name: evaluation
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
@@ -817,25 +857,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 34.341339111328125
+      Distance: 77.51980590820312
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -11.491691589355469
-        Y: -4.8794846534729
-        Z: -7.9398298263549805
+        X: 37.487884521484375
+        Y: 1.3000876903533936
+        Z: -7.9881391525268555
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.304796576499939
+      Pitch: 1.5697963237762451
       Target Frame: base_link
       Value: Orbit (rviz)
-      Yaw: 0.13540112972259521
+      Yaw: 6.173585891723633
     Saved: ~
 Window Geometry:
   Displays:

@@ -166,10 +166,13 @@ public:
     double clusteringTolerance;
     int minClusterSize;
     int maxClusterSize;
+    float graphDistThres;
+    float graphAngleThres;
 
     // removal
     float velThres;
     float modeProbThres;
+    bool enableDynamicRemoval;
 
     // filter
     float meanXBirth;
@@ -299,6 +302,9 @@ public:
         nh.param<double>(  "tracking/clustering/clusteringTolerance", clusteringTolerance, 10.0);
         nh.param<int>(  "tracking/clustering/minClusterSize", minClusterSize, 1.0);
         nh.param<int>(  "tracking/clustering/maxClusterSize", maxClusterSize, 1.0);
+        nh.param<float>(  "tracking/clustering/graphDistThres", graphDistThres, 1.0);
+        nh.param<float>(  "tracking/clustering/graphAngleThres", graphAngleThres, 1.0);
+
         
         nh.param<float>(  "tracking/filter/meanXBirth", meanXBirth, 1e3);
         nh.param<float>(  "tracking/filter/meanYBirth", meanYBirth, 10.0);
@@ -323,11 +329,13 @@ public:
         nh.param<float>(  "tracking/lshape/maxArea", maxArea, 10.0);
         nh.param<float>(  "tracking/lshape/maxRatio", maxRatio, 1.0);
         nh.param<float>(  "tracking/lshape/minDensity", minDensity, 10.0);
-
+        
+        nh.param<bool>("removal/enableDynamicRemoval", enableDynamicRemoval, false);
         nh.param<float>("removal/velTrhes", velThres, 0.3);
         nh.param<float>("removal/modeProbThres", modeProbThres, 0.7);
 
         nh.param<std::string>("rosbag/type", dataType, "normal");
+        
         usleep(100);
     }
 

@@ -397,16 +397,16 @@ namespace gmphd
       stateInteraction();
 
       // Predict new targets (spawns):
-      predictBirth2();
+      predictBirth();
 
       // Predict propagation of expected targets
-      predictTargets2();
+      predictTargets();
 
       // Build the update components
       buildUpdate();
 
       // Update the probabilities
-      update2();
+      update();
 
       // sort by decreasing weights
       size_t target_num = m_currTargets->m_gaussians.size();
@@ -422,19 +422,13 @@ namespace gmphd
         printf("id: %d weights: %f\n", m_currTargets->m_gaussians[i].m_track_id, m_currTargets->m_gaussians[i].m_weight);
       }
 
-      // Association
-      // associate(ordered_indices);
-
-      myPruneGaussians2(ordered_indices);
+      pruneGaussians(ordered_indices);
 
       updateModelProb();
 
       // IMM State Fusion
       estimateFusion();
-      
-      // Prune gaussians (remove weakest, merge close enough gaussians)
-      // pruneGaussians();
-      
+
       // Clean std::vectors :
       m_expMeasure.clear();
       m_expDisp.clear();
@@ -513,7 +507,7 @@ namespace gmphd
       ROS_WARN("TrackerList size: %d", (int)trackerList.size());
     }
 
-    void myPruneGaussians2(const std::vector<size_t> indices)
+    void pruneGaussians(const std::vector<size_t> indices)
     {
       associated.clear();
       GaussianMixture<S> pruned_targets;
@@ -807,188 +801,6 @@ namespace gmphd
       frame_count++;
     }
 
-    void myPruneGaussians(const std::vector<size_t> indices)
-    {
-      std::map<int, int> matched;
-      GaussianMixture<S> pruned_targets;
-      pruned_targets.m_gaussians.clear();
-      pruned_targets.m_gaussians2.clear();
-
-      int n_meas = m_measTargets->m_gaussians.size();
-      int n_tracker = m_expTargets->m_gaussians.size();
-
-      std::vector<int> i_close_to_best;
-      std::vector<bool> merge_checker(indices.size(), false);
-      int merge_cnt = 0;
-
-      for (size_t i = 0; i < indices.size(); ++i)
-      {
-        size_t i_best = indices[i];
-        if (i_best == -1 || m_currTargets->m_gaussians[i_best].m_weight < m_pruneTruncThld)
-          break;
-        
-        int corres_idx = getCorrespondingIndex(i_best);
-        printf("best idx: %d, coress idx: %d\n", i_best, corres_idx);
-        printf("best: %d, corres: %d\n", m_currTargets->m_gaussians[i_best].m_track_id, m_currTargets->m_gaussians[corres_idx].m_track_id);
-        if (merge_checker[i_best])
-        {
-          printf("%d already merged\n", i_best);
-          // already merged
-          continue;
-        } 
-
-        GaussianModel<S> merged_model;
-        GaussianModel<S> merged_model2;
-        i_close_to_best.clear();
-        merged_model.clear();
-        merged_model2.clear();
-        
-        int track_id = m_currTargets->m_gaussians[i_best].m_track_id; 
-        int model_type = m_currTargets->m_gaussians[i_best].model_type;
-        // I. Give birth tracker a track id
-        if (track_id < 0)
-        {
-          printf("Birth tracker: -1 -> %d\n", m_ntrack);
-          m_currTargets->m_gaussians[i_best].m_track_id = m_ntrack++; 
-          track_id = m_currTargets->m_gaussians[i_best].m_track_id;
-          merged_model = m_currTargets->m_gaussians[i_best];
-          merged_model2 = m_currTargets->m_gaussians[i_best];
-        }
-        else
-        {
-          // Find closest gaussians
-          TicToc closest_time;
-          std::vector<GaussianModel<S>> target_gaussians = m_currTargets->m_gaussians;
-          float gauss_distance;
-          Matrix<float, D, 1> point_vec;
-          Matrix<float, D, 1> mean_vec;
-          Matrix<float, D, D> cov;
-          i_close_to_best.push_back(i_best);
-          merge_checker[i_best] = true;
-          // merge_cnt++;
-          for (size_t j = 0; j < target_gaussians.size(); ++j)
-          {
-            if (j != i_best && !merge_checker[j])
-            {
-              // check model type
-              if (target_gaussians[j].model_type != model_type)
-                continue;
-              else
-              {
-                // compute distance
-                point_vec = target_gaussians[j].m_mean.head(D);
-                mean_vec =  target_gaussians[i_best].m_mean.head(D);
-                cov = target_gaussians[i_best].m_cov.topLeftCorner(D, D);
-                gauss_distance = mahalanobis<2>(point_vec, mean_vec, cov);
-                // printf("pt: %f, %f; mean: %f, %f, cov: %f %f %f %f, dist: %f\n", point_vec(0), point_vec(1), mean_vec(0), mean_vec(1), cov(0,0), cov(0,1), cov(1,0), cov(1,1), gauss_distance);
-                if ((gauss_distance < m_pruneMergeThld) && (target_gaussians[j].m_weight != 0.0))
-                {
-                  merge_checker[j] = true;
-                  merge_cnt++;
-                  // printf("compared id: %d; %f; %f %f %f; dist: %f\n", target_gaussians[j].m_track_id, target_gaussians[j].m_weight, target_gaussians[j].m_mean[0], target_gaussians[j].m_mean[1], 0.0, gauss_distance);
-                  i_close_to_best.push_back(j);
-                }
-              }
-
-            }
-          }
-          printf("curr tracker: %d; %f %f %f ;size: %d\n", track_id, target_gaussians[i_best].m_mean[0], target_gaussians[i_best].m_mean[1], 0.0, (int)i_close_to_best.size());
-          // ROS_WARN("Find closest: %f ms\n", closest_time.toc());
-          // merge gaussians
-          TicToc merge_time;
-
-          if (i_close_to_best.size() > 1)
-          {
-            merged_model.m_track_id = target_gaussians[i_best].m_track_id;
-
-            for (auto const &idx : i_close_to_best)
-            {
-              merged_model.m_weight += target_gaussians[idx].m_weight;
-            }
-
-            for (auto const &idx : i_close_to_best)
-            {
-              merged_model.m_mean += target_gaussians[idx].m_mean * target_gaussians[idx].m_weight;
-            }
-
-            if (merged_model.m_weight != 0.f)
-              merged_model.m_mean /= merged_model.m_weight;
-            
-            merged_model.m_cov.setZero();
-            for(auto const &idx : i_close_to_best)
-            {
-              Matrix<float, S, 1> diff = merged_model.m_mean - target_gaussians[idx].m_mean;
-              merged_model.m_cov += target_gaussians[idx].m_weight * (target_gaussians[idx].m_cov + diff * diff.transpose());
-            }
-
-            if (merged_model.m_weight != 0.f)
-              merged_model.m_cov /= merged_model.m_weight;
-          }
-          else
-          {
-            merged_model = target_gaussians[i_close_to_best[0]];
-          }
-          ROS_WARN("Merge time: %f ms\n", merge_time.toc());
-        }
-
-        // II. Add survived tracker
-        if (i_best < n_tracker) // survived filter (propagated) + birth + survived_filter(not propagated)
-        {
-          printf("Survived tracker: %d %f; %f %f 0.0\n", track_id, merged_model.m_weight, merged_model.m_mean[0], merged_model.m_mean[1]);
-          if (matched.find(track_id) == matched.end())
-          {
-            printf("Added\n");
-            matched.insert(std::make_pair(track_id, -1));
-            addTracker(merged_model);
-            pruned_targets.m_gaussians.emplace_back(std::move(merged_model));
-            pruned_targets.m_gaussians2.emplace_back(std::move(merged_model2));
-          }
-        }
-        // III. Add new trackers
-        else 
-        {
-          size_t i_meas = (i_best - n_tracker) / n_tracker;
-          int meas_id = m_measTargets->m_gaussians[i_meas].m_track_id;
-          printf("New track_id: %d, meas_id: %d, track weight: %f; %f %f 0.0\n", track_id, meas_id, merged_model.m_weight, merged_model.m_mean[0], merged_model.m_mean[1]);
-          if (matched.find(track_id) == matched.end()) // new tracker
-          {
-            printf("Added\n");
-            addTracker(merged_model);
-            matched.insert(std::make_pair(track_id, meas_id));
-            pruned_targets.m_gaussians.emplace_back(std::move(merged_model));
-            pruned_targets.m_gaussians.emplace_back(std::move(merged_model2));  
-          }
-        }
-
-        if (pruned_targets.m_gaussians.size() > m_nMaxPrune) // max tracker
-          break;
-      }
-      ROS_WARN("%d out of %d has merged", merge_cnt, (int)indices.size());
-      
-      // IV. For measurements that are not associated, add new tracker
-      size_t birth_idx = m_nPredTargets - m_spawnTargets->m_gaussians.size() - m_birthTargets->m_gaussians.size();
-      for (size_t k = 0; k < m_measTargets->m_gaussians.size(); ++k)
-      {
-        int meas_id = m_measTargets->m_gaussians[k].m_track_id;
-        auto result = std::find_if(matched.begin(), matched.end(), 
-          [meas_id](const auto &element){return element.second == meas_id;});
-        if (result == matched.end()) // not matched
-        {
-          size_t gauss_idx = m_nPredTargets * (k+1) + birth_idx - 1;
-          // printf("Birth idx: %d, Gauss_idx: %d, exp size: %d\n", birth_idx, gauss_idx, m_expTargets->m_gaussians.size());
-          GaussianModel<S> birth_gaussian = m_currTargets->m_gaussians[gauss_idx];
-          // printf("Meas id: %d, %f;%f;0.0   birth gaussian: %d, %f; %f; 0.0   weight: %f\n", 
-          //   meas_id, m_measTargets->m_gaussians[k].m_mean[0], m_measTargets->m_gaussians[k].m_mean[1],
-          //   birth_gaussian.m_track_id, birth_gaussian.m_mean[0], birth_gaussian.m_mean[1], birth_gaussian.m_weight);
-          birth_gaussian.m_track_id = m_ntrack++;
-          birth_gaussian.m_weight = birth_gaussian.m_weight < 0.2f ? 0.2f: birth_gaussian.m_weight;
-          pruned_targets.m_gaussians.emplace_back(std::move(birth_gaussian));
-        }
-      }
-      m_currTargets->m_gaussians = pruned_targets.m_gaussians;
-      frame_count++;
-    }
-
     void buildUpdate()
     {
       // Concatenate all the wannabe targets :
@@ -1070,50 +882,8 @@ namespace gmphd
       }
 
     }
-    
+
     void predictBirth()
-    {
-      m_spawnTargets->m_gaussians.clear();
-      m_birthTargets->m_gaussians.clear();
-
-      // -----------------------------------------
-      // Compute spontaneous births
-      m_birthTargets->m_gaussians = m_birthModel->m_gaussians;
-
-      m_nPredTargets += m_birthTargets->m_gaussians.size();
-
-      // -----------------------------------------
-      // Compute spawned targets
-      printf("Spawn: ");
-      for (auto const &curr : m_currTargets->m_gaussians)
-      {
-        for (auto const &spawn : m_spawnModels)
-        {
-          GaussianModel<S> new_spawn;
-
-          // Define a gaussian model from the existing target
-          // and spawning properties
-          // new_spawn.m_weight = curr.m_weight * spawn.m_weight;
-          new_spawn.m_weight = curr.m_weight;
-          new_spawn.m_mean = spawn.m_offset + spawn.m_trans * curr.m_mean;
-          new_spawn.m_cov = spawn.m_cov + spawn.m_trans * curr.m_cov * spawn.m_trans.transpose();
-          // new_spawn.m_isFalseTarget = true;
-          printf("%d ", curr.m_track_id);
-          new_spawn.m_track_id = curr.m_track_id;
-          new_spawn.model_prob = curr.model_prob;
-          new_spawn.model_type = 0; // static
-          new_spawn.c = curr.c;
-          // Add this new gaussian to the list of expected targets
-          m_spawnTargets->m_gaussians.push_back(std::move(new_spawn));
-          ++m_nSpawned;
-          // Update the number of expected targets
-          ++m_nPredTargets;
-        }
-      }
-      printf("\n");
-    }
-
-    void predictBirth2()
     {
       m_spawnTargets->m_gaussians.clear();
       m_birthTargets->m_gaussians.clear();
@@ -1162,31 +932,6 @@ namespace gmphd
       m_expTargets->m_gaussians.clear();
       m_expTargets->m_gaussians.reserve(m_currTargets->m_gaussians.size());
       printf("Targets: \n");
-      for (auto const &curr : m_currTargets->m_gaussians)
-      {
-        // Compute the new shape of the target
-        GaussianModel<S> new_target;
-        new_target.m_weight = m_pSurvival * curr.m_weight;
-        new_target.m_mean = m_tgtDynTrans * curr.m_mean;
-        new_target.m_cov = m_tgtDynCov + m_tgtDynTrans * curr.m_cov * m_tgtDynTrans.transpose();
-        new_target.m_track_id = curr.m_track_id;
-        new_target.model_prob = curr.model_prob;
-        new_target.model_type = 1; // constant velocity
-        new_target.c = curr.c;
-        printf("%d ", curr.m_track_id);
-        // Push back to the expected targets
-        m_expTargets->m_gaussians.push_back(new_target);
-        ++m_nPredTargets;
-        ++m_nPropagated;
-      }
-      printf("\n");
-    }
-
-    void predictTargets2()
-    {
-      m_expTargets->m_gaussians.clear();
-      m_expTargets->m_gaussians.reserve(m_currTargets->m_gaussians.size());
-      printf("Targets: \n");
       for (auto const &curr : m_currTargets->m_gaussians) // dynamic objects
       {
         // Compute the new shape of the target
@@ -1205,12 +950,6 @@ namespace gmphd
         ++m_nPropagated;
       }
       printf("\n");
-    }
-    
-
-    void pruneGaussians()
-    {
-      m_currTargets->prune(m_pruneTruncThld, m_pruneMergeThld, m_nMaxPrune);
     }
 
     int getCorrespondingIndex(int idx)
@@ -1232,96 +971,6 @@ namespace gmphd
     }
 
     void update()
-    {
-      m_currTargets->m_gaussians.clear();
-      m_currTargets->m_gaussians2.clear();
-      // We'll consider every possible association : std::vector size is (expected targets)*(measured targets)
-      m_currTargets->m_gaussians.reserve((m_measTargets->m_gaussians.size() + 1) *
-                                         m_expTargets->m_gaussians.size());
-
-      printf("Update - meas %d, exp: %d\n", (int)m_measTargets->m_gaussians.size(), (int)m_expTargets->m_gaussians.size());
-
-      // First set of gaussians : mere propagation of existing ones
-      // don't propagate the "birth" targets... we set their weight to 0
-      for (auto const &target : m_expTargets->m_gaussians)
-      {
-        // Copy the target into the final set, adjust the weight if it was spawned
-        auto newTarget = target;
-        // newTarget.m_weight = target.m_isFalseTarget ? 0.f : (1.f - m_pDetection) * target.m_weight;
-        newTarget.m_weight = target.m_isFalseTarget ? 0.f : target.m_weight;
-        newTarget.m_track_id = target.m_track_id;
-        newTarget.model_prob = target.model_prob;
-        newTarget.model_type = target.model_type;
-        newTarget.c = target.c;
-        m_currTargets->m_gaussians.emplace_back(std::move(newTarget));
-      }
-
-      uint cur_id = 0;
-      std::vector<int> best_indices;
-      // Second set of gaussians : match observations and previsions
-      for (auto &measuredTarget : m_measTargets->m_gaussians)
-      {
-        m_tempTargets->m_gaussians.clear();
-        uint start_normalize = m_currTargets->m_gaussians.size();
-
-        for (uint n_targt = 0; n_targt < m_expTargets->m_gaussians.size(); ++n_targt)
-        {
-
-          // Compute matching factor between predictions and measures.
-          const auto distance = mahalanobis<2>(measuredTarget.m_mean.template head<D>(),
-                                               m_expMeasure[n_targt].template head<D>(),
-                                               m_expDisp[n_targt].template topLeftCorner<D, D>());
-          GaussianModel<S> matchTarget;
-
-          matchTarget.m_weight = m_pDetection * m_expTargets->m_gaussians[n_targt].m_weight / distance;
-
-          matchTarget.m_mean = m_expTargets->m_gaussians[n_targt].m_mean +
-                               m_uncertainty[n_targt] * (measuredTarget.m_mean - m_expMeasure[n_targt]);
-
-          matchTarget.m_cov = m_covariance[n_targt];
-          matchTarget.m_track_id = m_expTargets->m_gaussians[n_targt].m_track_id;
-          // matchTarget.model_prob = 00; // TO-DO
-          matchTarget.model_type = m_expTargets->m_gaussians[n_targt].model_type;
-          matchTarget.c = m_expTargets->m_gaussians[n_targt].c;
-          // printf("exp target: %f;%f;%f;%f\n", m_expTargets->m_gaussians[n_targt].m_mean[0], m_expTargets->m_gaussians[n_targt].m_mean[1], m_expTargets->m_gaussians[n_targt].m_mean[2],m_expTargets->m_gaussians[n_targt].m_mean[3]);
-          // printf("meas mean: %f;%f;%f;%f, expMeasure: %f;%f;%f;%f\n", measuredTarget.m_mean[0], measuredTarget.m_mean[1], measuredTarget.m_mean[2], measuredTarget.m_mean[3], m_expMeasure[n_targt][0], m_expMeasure[n_targt][1], m_expMeasure[n_targt][2], m_expMeasure[n_targt][3]);
-          // printf("diff: %f; %f; %f; %f\n", measuredTarget.m_mean[0] - m_expMeasure[n_targt][0], measuredTarget.m_mean[1]-m_expMeasure[n_targt][1], measuredTarget.m_mean[2]-m_expMeasure[n_targt][2], measuredTarget.m_mean[3]-m_expMeasure[n_targt][3]);
-          // std::cout << "cov: " << std::endl;
-          // std::cout << m_uncertainty[n_targt] <<std::endl;
-          // printf("matched mean: %f;%f;%f;%f\n", matchTarget.m_mean[0], matchTarget.m_mean[1], matchTarget.m_mean[2], matchTarget.m_mean[3]);
-          // printf("distance: %f, weight: %f, mean: %f;%f\n", distance, m_expTargets->m_gaussians[n_targt].m_weight, matchTarget.m_mean[0], matchTarget.m_mean[1]);
-
-          m_currTargets->m_gaussians.emplace_back(std::move(matchTarget));
-        }
-        cur_id++;
-        // Normalize weights in the same predicted set, taking clutter into account
-        m_currTargets->normalize(m_measNoiseBackground, start_normalize,
-                                 m_currTargets->m_gaussians.size(), 1);
-      }
-      printf("CurrTargets num: %d\n", (int)m_currTargets->m_gaussians.size());
-      // print
-      printf("Unassociated\n");
-      int meas_idx = -1;
-      for (size_t i = 0; i < m_currTargets->m_gaussians.size(); ++i)
-      {
-        if (m_currTargets->m_gaussians[i].m_track_id < 0)
-        {
-          if (meas_idx < 0){
-            meas_idx++;
-            continue;
-          } else {
-            printf("meas_id: %d, loc: %f;%f;0.0, weight: %f\n", 
-              m_measTargets->m_gaussians[meas_idx].m_track_id, 
-              m_measTargets->m_gaussians[meas_idx].m_mean[0],
-              m_measTargets->m_gaussians[meas_idx].m_mean[1],
-              m_currTargets->m_gaussians[i].m_weight);
-            meas_idx++;
-          }            
-        }
-      }
-    }
-    
-    void update2()
     {
       m_currTargets->m_gaussians.clear();
       m_currTargets->m_gaussians2.clear();

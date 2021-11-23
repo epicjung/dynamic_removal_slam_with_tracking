@@ -1,0 +1,9 @@
+<launch>
+
+    <node pkg="receive_gps" type="gps_node" name="gps_node" output="screen">
+        <remap from="/gt_traj_pub" to="/gps/path"/>
+        <remap from="/tcpfix" to="/carla/ego_vehicle/gnss/gnss/fix"/>
+        <remap from="/imu/data" to="/carla/ego_vehicle/imu/imu"/>
+    </node>
+
+</launch>
