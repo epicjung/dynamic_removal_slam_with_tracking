@@ -6,22 +6,20 @@ Panels:
       Expanded:
         - /Global Options1
         - /links1
-        - /Odometry1
+        - /links1/map1
         - /Point Cloud1
         - /Feature Cloud1
         - /Mapping1
-        - /Mapping1/Map (cloud)1
-        - /Mapping1/corner1
-        - /Mapping1/surface1
         - /Tracking1
         - /Tracking1/meas_cent1
-        - /Tracking1/BoundingBoxArray1
         - /Segmentation1
-        - /Segmentation1/static1
-        - /Segmentation1/nonground_ds1
-        - /Segmentation1/Patches1
         - /evaluation1
-        - /evaluation1/gps1
+        - /evaluation1/Tracking1
+        - /evaluation1/Tracking1/Estimated1
+        - /evaluation1/Tracking1/Ground-truth1
+        - /evaluation1/SLAM1
+        - /evaluation1/SLAM1/gt1/Shape1
+        - /evaluation1/SLAM1/est1/Shape1
       Splitter Ratio: 0.5600000023841858
     Tree Height: 662
   - Class: rviz/Selection
@@ -59,127 +57,28 @@ Visualization Manager:
           Update Interval: 0
           Value: false
         - Class: rviz/Axes
-          Enabled: true
-          Length: 2
+          Enabled: false
+          Length: 10
           Name: map
           Radius: 0.5
-          Reference Frame: map
-          Value: true
+          Reference Frame: carla_map
+          Value: false
         - Class: rviz/Axes
-          Enabled: true
+          Enabled: false
           Length: 1
           Name: base_link
           Radius: 0.30000001192092896
           Reference Frame: base_link
+          Value: false
+        - Class: rviz/Axes
+          Enabled: true
+          Length: 1
+          Name: Odom
+          Radius: 0.10000000149011612
+          Reference Frame: <Fixed Frame>
           Value: true
       Enabled: true
       Name: links
-    - Class: rviz/Group
-      Displays:
-        - Angle Tolerance: 0.10000000149011612
-          Class: rviz/Odometry
-          Covariance:
-            Orientation:
-              Alpha: 0.5
-              Color: 255; 255; 127
-              Color Style: Unique
-              Frame: Local
-              Offset: 1
-              Scale: 1
-              Value: true
-            Position:
-              Alpha: 0.30000001192092896
-              Color: 204; 51; 204
-              Scale: 1
-              Value: true
-            Value: false
-          Enabled: true
-          Keep: 300
-          Name: Odom IMU
-          Position Tolerance: 0.10000000149011612
-          Shape:
-            Alpha: 1
-            Axes Length: 0.5
-            Axes Radius: 0.10000000149011612
-            Color: 255; 25; 0
-            Head Length: 0.30000001192092896
-            Head Radius: 0.10000000149011612
-            Shaft Length: 1
-            Shaft Radius: 0.05000000074505806
-            Value: Axes
-          Topic: /odometry/imu
-          Unreliable: false
-          Value: true
-        - Angle Tolerance: 0.10000000149011612
-          Class: rviz/Odometry
-          Covariance:
-            Orientation:
-              Alpha: 0.5
-              Color: 255; 255; 127
-              Color Style: Unique
-              Frame: Local
-              Offset: 1
-              Scale: 1
-              Value: true
-            Position:
-              Alpha: 0.30000001192092896
-              Color: 204; 51; 204
-              Scale: 1
-              Value: true
-            Value: false
-          Enabled: true
-          Keep: 300
-          Name: Odom GPS
-          Position Tolerance: 0.10000000149011612
-          Shape:
-            Alpha: 1
-            Axes Length: 1
-            Axes Radius: 0.30000001192092896
-            Color: 255; 25; 0
-            Head Length: 0.30000001192092896
-            Head Radius: 0.10000000149011612
-            Shaft Length: 1
-            Shaft Radius: 0.05000000074505806
-            Value: Axes
-          Topic: /odometry/gps
-          Unreliable: false
-          Value: true
-        - Angle Tolerance: 0.10000000149011612
-          Class: rviz/Odometry
-          Covariance:
-            Orientation:
-              Alpha: 0.5
-              Color: 255; 255; 127
-              Color Style: Unique
-              Frame: Local
-              Offset: 1
-              Scale: 1
-              Value: true
-            Position:
-              Alpha: 0.30000001192092896
-              Color: 204; 51; 204
-              Scale: 1
-              Value: true
-            Value: false
-          Enabled: false
-          Keep: 300
-          Name: Odom lidar
-          Position Tolerance: 0.10000000149011612
-          Shape:
-            Alpha: 1
-            Axes Length: 0.25
-            Axes Radius: 0.10000000149011612
-            Color: 255; 25; 0
-            Head Length: 0.30000001192092896
-            Head Radius: 0.10000000149011612
-            Shaft Length: 1
-            Shaft Radius: 0.05000000074505806
-            Value: Axes
-          Topic: /lio_sam/mapping/odometry
-          Unreliable: false
-          Value: false
-      Enabled: false
-      Name: Odometry
     - Class: rviz/Group
       Displays:
         - Alpha: 1
@@ -194,7 +93,7 @@ Visualization Manager:
           Color: 255; 255; 255
           Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: false
+          Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Max Intensity: 128
@@ -211,7 +110,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: false
+          Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -240,7 +139,7 @@ Visualization Manager:
           Use Fixed Frame: true
           Use rainbow: true
           Value: false
-      Enabled: true
+      Enabled: false
       Name: Point Cloud
     - Class: rviz/Group
       Displays:
@@ -307,8 +206,8 @@ Visualization Manager:
         - Alpha: 1
           Autocompute Intensity Bounds: false
           Autocompute Value Bounds:
-            Max Value: 1.2790049314498901
-            Min Value: -1.968289852142334
+            Max Value: 1.5514079332351685
+            Min Value: -1.769028663635254
             Value: true
           Axis: Z
           Channel Name: intensity
@@ -316,7 +215,7 @@ Visualization Manager:
           Color: 255; 255; 255
           Color Transformer: AxisColor
           Decay Time: 1000
-          Enabled: true
+          Enabled: false
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Max Intensity: 128
@@ -333,12 +232,12 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
-            Max Value: 4.946173191070557
-            Min Value: -1844201127936
+            Max Value: 1.4478853940963745
+            Min Value: -2.1529481410980225
             Value: true
           Axis: Z
           Channel Name: intensity
@@ -473,7 +372,7 @@ Visualization Manager:
           Buffer Length: 1
           Class: rviz/Path
           Color: 255; 85; 255
-          Enabled: true
+          Enabled: false
           Head Diameter: 0.30000001192092896
           Head Length: 0.20000000298023224
           Length: 0.30000001192092896
@@ -491,7 +390,7 @@ Visualization Manager:
           Shaft Length: 0.10000000149011612
           Topic: /lio_sam/imu/path
           Unreliable: false
-          Value: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -504,7 +403,7 @@ Visualization Manager:
           Color: 255; 255; 255
           Color Transformer: AxisColor
           Decay Time: 0
-          Enabled: false
+          Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -519,7 +418,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: false
+          Value: true
         - Class: rviz/MarkerArray
           Enabled: true
           Marker Topic: /lio_sam/mapping/loop_closure_constraints
@@ -572,7 +471,7 @@ Visualization Manager:
           Color: 0; 0; 255
           Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: false
+          Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -587,15 +486,15 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: false
+          Value: true
         - Class: rviz/MarkerArray
-          Enabled: false
+          Enabled: true
           Marker Topic: /tracking/lidar/meas_cluster_info
           Name: meas_info
           Namespaces:
-            {}
+            "": true
           Queue Size: 100
-          Value: false
+          Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -608,7 +507,7 @@ Visualization Manager:
           Color: 0; 255; 0
           Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: false
+          Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -623,7 +522,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: false
+          Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -657,15 +556,15 @@ Visualization Manager:
           Marker Topic: /tracking/lidar/tracker_cluster_info
           Name: track_info
           Namespaces:
-            {}
+            "": true
           Queue Size: 100
           Value: true
         - Class: jsk_rviz_plugin/BoundingBoxArray
-          Enabled: true
+          Enabled: false
           Name: BoundingBoxArray
           Topic: /tracking/lidar/bbox
           Unreliable: false
-          Value: true
+          Value: false
           alpha: 0.800000011920929
           color: 25; 255; 0
           coloring: Flat color
@@ -772,7 +671,7 @@ Visualization Manager:
           Color: 255; 0; 248
           Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: true
+          Enabled: false
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -787,7 +686,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: true
+          Value: false
         - Alpha: 1
           Class: jsk_rviz_plugin/PolygonArray
           Color: 25; 255; 0
@@ -805,47 +704,149 @@ Visualization Manager:
       Name: Segmentation
     - Class: rviz/Group
       Displays:
-        - Angle Tolerance: 0.10000000149011612
-          Class: rviz/Odometry
-          Covariance:
-            Orientation:
-              Alpha: 0.5
-              Color: 255; 255; 127
-              Color Style: Unique
-              Frame: Local
-              Offset: 1
-              Scale: 1
+        - Class: rviz/Group
+          Displays:
+            - Class: jsk_rviz_plugin/BoundingBoxArray
+              Enabled: true
+              Name: Estimated
+              Topic: /exp/trk/est_bbox
+              Unreliable: false
               Value: true
-            Position:
-              Alpha: 0.30000001192092896
-              Color: 204; 51; 204
-              Scale: 1
+              alpha: 0.800000011920929
+              color: 25; 255; 0
+              coloring: Label
+              line width: 0.10000000149011612
+              only edge: false
+              show coords: false
+            - Class: jsk_rviz_plugin/BoundingBoxArray
+              Enabled: true
+              Name: Ground-truth
+              Topic: /exp/gt_bbox
+              Unreliable: false
               Value: true
-            Value: false
+              alpha: 1
+              color: 25; 255; 0
+              coloring: Label
+              line width: 0.10000000149011612
+              only edge: true
+              show coords: false
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 10
+                Min Value: -10
+                Value: true
+              Axis: Z
+              Channel Name: ObjTag
+              Class: rviz/PointCloud2
+              Color: 233; 185; 110
+              Color Transformer: Intensity
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 0; 0; 0
+              Min Color: 255; 255; 255
+              Name: raw
+              Position Transformer: XYZ
+              Queue Size: 10
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.05000000074505806
+              Style: Flat Squares
+              Topic: /exp/trk/cloud
+              Unreliable: false
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Class: rviz/MarkerArray
+              Enabled: true
+              Marker Topic: /exp/trk/point_id
+              Name: point ids
+              Namespaces:
+                {}
+              Queue Size: 100
+              Value: true
           Enabled: true
-          Keep: 1
-          Name: gps
-          Position Tolerance: 0.10000000149011612
-          Shape:
-            Alpha: 1
-            Axes Length: 1
-            Axes Radius: 0.10000000149011612
-            Color: 255; 25; 0
-            Head Length: 0.30000001192092896
-            Head Radius: 0.10000000149011612
-            Shaft Length: 1
-            Shaft Radius: 0.05000000074505806
-            Value: Axes
-          Topic: /exp/gt_odom
-          Unreliable: false
-          Value: true
+          Name: Tracking
+        - Class: rviz/Group
+          Displays:
+            - Angle Tolerance: 0.10000000149011612
+              Class: rviz/Odometry
+              Covariance:
+                Orientation:
+                  Alpha: 0.5
+                  Color: 255; 255; 127
+                  Color Style: Unique
+                  Frame: Local
+                  Offset: 1
+                  Scale: 1
+                  Value: true
+                Position:
+                  Alpha: 0.30000001192092896
+                  Color: 204; 51; 204
+                  Scale: 1
+                  Value: true
+                Value: false
+              Enabled: true
+              Keep: 1
+              Name: gt
+              Position Tolerance: 0.10000000149011612
+              Shape:
+                Alpha: 1
+                Axes Length: 1.5
+                Axes Radius: 0.10000000149011612
+                Color: 255; 25; 0
+                Head Length: 0.20000000298023224
+                Head Radius: 0.20000000298023224
+                Shaft Length: 1
+                Shaft Radius: 0.20000000298023224
+                Value: Arrow
+              Topic: /exp/gt_odom
+              Unreliable: false
+              Value: true
+            - Angle Tolerance: 0.10000000149011612
+              Class: rviz/Odometry
+              Covariance:
+                Orientation:
+                  Alpha: 0.5
+                  Color: 255; 255; 127
+                  Color Style: Unique
+                  Frame: Local
+                  Offset: 1
+                  Scale: 1
+                  Value: true
+                Position:
+                  Alpha: 0.30000001192092896
+                  Color: 204; 51; 204
+                  Scale: 1
+                  Value: true
+                Value: true
+              Enabled: true
+              Keep: 1
+              Name: est
+              Position Tolerance: 0.10000000149011612
+              Shape:
+                Alpha: 1
+                Axes Length: 1
+                Axes Radius: 0.20000000298023224
+                Color: 25; 255; 0
+                Head Length: 0.20000000298023224
+                Head Radius: 0.20000000298023224
+                Shaft Length: 1
+                Shaft Radius: 0.20000000298023224
+                Value: Arrow
+              Topic: /exp/est_odom
+              Unreliable: false
+              Value: true
+          Enabled: false
+          Name: SLAM
       Enabled: true
       Name: evaluation
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
     Default Light: true
-    Fixed Frame: odom
+    Fixed Frame: old_lidar_link
     Frame Rate: 30
   Name: root
   Tools:
@@ -857,16 +858,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 77.51980590820312
+      Distance: 40.03644943237305
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 37.487884521484375
-        Y: 1.3000876903533936
-        Z: -7.9881391525268555
+        X: 3.6803154945373535
+        Y: -1.9577423334121704
+        Z: 1.3545305728912354
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
@@ -875,7 +876,7 @@ Visualization Manager:
       Pitch: 1.5697963237762451
       Target Frame: base_link
       Value: Orbit (rviz)
-      Yaw: 6.173585891723633
+      Yaw: 2.6703908443450928
     Saved: ~
 Window Geometry:
   Displays:
@@ -883,7 +884,7 @@ Window Geometry:
   Height: 1004
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd0000000400000000000002e200000392fc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb0000000a0049006d006100670065000000002e000001340000000000000000fb000000100044006900730070006c006100790073010000003d00000392000000c900fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730000000286000000a70000005c00ffffff000000010000011100000392fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000003d00000392000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000004b000000040fc0100000002fb0000000800540069006d00650000000000000004b00000000000000000fb0000000800540069006d00650100000000000004500000000000000000000003810000039200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000004000000000000019600000392fc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb0000000a0049006d006100670065000000002e000001340000000000000000fb000000100044006900730070006c006100790073010000003d00000392000000c900fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730000000286000000a70000005c00ffffff000000010000022600000392fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000003d00000392000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000004b000000040fc0100000002fb0000000800540069006d00650000000000000004b00000000000000000fb0000000800540069006d00650100000000000004500000000000000000000003b80000039200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Tool Properties:

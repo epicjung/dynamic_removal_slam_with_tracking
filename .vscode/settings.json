@@ -76,7 +76,9 @@
         "streambuf": "cpp",
         "cfenv": "cpp",
         "typeindex": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "codecvt": "cpp",
+        "filesystem": "cpp"
     },
     "python.analysis.extraPaths": [
         "/home/euigon/liosam_ws/devel/lib/python2.7/dist-packages",

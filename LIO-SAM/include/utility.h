@@ -63,7 +63,7 @@ using namespace std;
 
 typedef pcl::PointXYZI PointType;
 
-enum class SensorType { VELODYNE, OUSTER };
+enum class SensorType { VELODYNE, OUSTER, CARLA };
 
 class ParamServer
 {
@@ -199,6 +199,7 @@ public:
     float maxArea;
     float maxRatio;
     float minDensity;
+    float maxDensity;
 
     std::string dataType;
 
@@ -233,6 +234,10 @@ public:
         else if (sensorStr == "ouster")
         {
             sensor = SensorType::OUSTER;
+        }
+        else if (sensorStr == "carla")
+        {
+            sensor = SensorType::CARLA;
         }
         else
         {
@@ -329,13 +334,14 @@ public:
         nh.param<float>(  "tracking/lshape/maxArea", maxArea, 10.0);
         nh.param<float>(  "tracking/lshape/maxRatio", maxRatio, 1.0);
         nh.param<float>(  "tracking/lshape/minDensity", minDensity, 10.0);
-        
+        nh.param<float>(  "tracking/lshape/maxDensity", maxDensity, 10.0);
+
         nh.param<bool>("removal/enableDynamicRemoval", enableDynamicRemoval, false);
         nh.param<float>("removal/velTrhes", velThres, 0.3);
         nh.param<float>("removal/modeProbThres", modeProbThres, 0.7);
 
         nh.param<std::string>("rosbag/type", dataType, "normal");
-        
+
         usleep(100);
     }
 

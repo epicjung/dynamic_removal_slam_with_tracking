@@ -15,7 +15,11 @@ find_package(catkin REQUIRED
     geometry_msgs
     derived_object_msgs
     jsk_recognition_msgs
+    pcl_conversions
+    visualization_msgs
 )
+
+find_package(PCL REQUIRED QUIET)
 
 catkin_package(
   INCLUDE_DIRS
@@ -26,9 +30,10 @@ catkin_package(
 include_directories(
  include
  ${catkin_INCLUDE_DIRS}
+ ${PCL_INCLUDE_DIRS}
  src
 )
 
-add_executable(exp_node src/experiment.cpp)
+add_executable(exp_node src/experiment_slam.cpp src/iou.cpp src/iou.h)
 add_dependencies(exp_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(exp_node ${catkin_LIBRARIES})
+target_link_libraries(exp_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})

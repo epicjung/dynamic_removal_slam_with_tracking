@@ -1,8 +1,8 @@
 lio_sam:
 
   # Topics
-  pointCloudTopic: "/carla/ego_vehicle/lidar/lidar/point_cloud"               # Point cloud data
-  imuTopic: "/carla/ego_vehicle/imu/imu"                         # IMU data
+  pointCloudTopic: "/carla/ego_vehicle/semantic_lidar"               # Point cloud data
+  imuTopic: "/carla/ego_vehicle/imu"                         # IMU data
 
   odomTopic: "/odometry/imu"                   # IMU pre-preintegration odometry, same frequency as IMU
 
@@ -25,10 +25,10 @@ lio_sam:
   savePCDDirectory: "/LOAM/"        # in your home folder, starts and ends with "/". Warning: the code deletes "LOAM" folder then recreates it. See "mapOptimization" for implementation
 
   # Sensor Settings
-  sensor: ouster                            # lidar sensor type, either 'velodyne' or 'ouster'
+  sensor: carla                            # lidar sensor type, either 'velodyne' or 'ouster' or 'carla'
   N_SCAN: 64                                  # number of lidar channel (i.e., 16, 32, 64, 128)
   Horizon_SCAN: 1800                          # lidar horizontal resolution (Velodyne:1800, Ouster:512,1024,2048)
-  downsampleRate: 2                           # default: 1. Downsample your data if too many points. i.e., 16 = 64 / 4, 16 = 16 / 1
+  downsampleRate: 1                           # default: 1. Downsample your data if too many points. i.e., 16 = 64 / 4, 16 = 16 / 1
   lidarMinRange: 0.1                          # default: 1.0, minimum lidar range to be used
   lidarMaxRange: 50.0                       # default: 1000.0, maximum lidar range to be used
   minAngle: -26.8
@@ -98,9 +98,9 @@ tracking:
     maxZ: 3.0
     minZ: -10.0
     maxR: 100.0
-    clusteringTolerance: 0.5
-    minClusterSize: 4 # opt 4
-    maxClusterSize: 5000
+    clusteringTolerance: 0.7 # opt 0.5
+    minClusterSize: 5 # opt 4
+    maxClusterSize: 3000 # opt 5000
     graphDistThres: 0.3
     graphAngleThres: 20.0
 
@@ -126,19 +126,31 @@ tracking:
 
   # L-Shape fitting
   lshape:
-    minHeight: 0.2 # opt: 0.5
+    minHeight: 0.4 # opt: 0.5
     maxHeight: 3.0
-    maxArea: 15.0
+    maxArea: 30.0 
     maxRatio: 9.0
     minDensity: 3.0
+    maxDensity: 1500
 
 # ----------------------
 # REMOVAL
 # ----------------------
 removal:
-  enableDynamicRemoval: false
-  velThres: 0.3
-  modeProbThres: 0.7
+  enableDynamicRemoval: true
+  velThres: 0.1
+  modeProbThres: 0.5
+
+# ----------------------
+# EXPERIMENT
+# ----------------------
+experiment:
+  save_dir: "/home/euigon/experiment/traj_result_dynamic/"
+  eval_tracking: true
+  eval_slam: false
+  max_out_cnt: 20
+  lidar_scope: 40.0
+  
 
 # Navsat (convert GPS coordinates to Cartesian)
 navsat:

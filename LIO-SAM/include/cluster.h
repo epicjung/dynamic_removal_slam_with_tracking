@@ -31,6 +31,7 @@ public:
     float m_max_area;
     float m_max_ratio;
     float m_min_density;
+    float m_max_density;
 
     int mode;
     float prob;
@@ -45,8 +46,8 @@ public:
         cloud.reserve(10000);
     }
 
-    Cluster(float min_height, float max_height, float max_area, float max_ratio, float min_density)
-    : m_min_height(min_height), m_max_height(max_height), m_max_area(max_area), m_max_ratio(max_ratio), m_min_density(min_density)
+    Cluster(float min_height, float max_height, float max_area, float max_ratio, float min_density, float max_density)
+    : m_min_height(min_height), m_max_height(max_height), m_max_area(max_area), m_max_ratio(max_ratio), m_min_density(min_density), m_max_density(max_density)
     {
         bbox.value = -1.0;
         cloud.reserve(10000); 
@@ -111,13 +112,15 @@ public:
         float ratio = rrect.size.height > rrect.size.width ? rrect.size.height / rrect.size.width : rrect.size.width / rrect.size.height;
         printf("ratio: %f\n", ratio);
         m_ratio = ratio;
-        if (ratio >= m_max_ratio)
+        if (ratio >= m_max_ratio) {
+            // if(rrect.size.height > 1.0 || rrect.size.width > 1.0)
             return;
+        }
 
         float density = cloud.points.size() / (rrect.size.width * rrect.size.height * height);
         printf("density: %f\n", density);
         m_density = density;
-        if (density < m_min_density) 
+        if (density < m_min_density || density > m_max_density) 
             return;
         
         std::vector<cv::Point2f> vertices = lshaped.getRectVertex();
@@ -135,7 +138,6 @@ public:
         bbox.dimensions.y = rrect.size.height;
         bbox.dimensions.z = height;
         bbox.value = 0.0;
-        printf("Centers: %f;%f;%f \n", center.x, center.y, center.z);
         tf::Quaternion quat = tf::createQuaternionFromYaw(rrect.angle * M_PI / 180.0);
         tf::quaternionTFToMsg(quat, bbox.pose.orientation);
     }
@@ -158,6 +160,7 @@ private:
     float max_area_;
     float max_ratio_;
     float min_density_;
+    float max_density_;
 
     std::map<int, int> id_to_idx_;
     
@@ -190,13 +193,14 @@ public:
         cluster_extractor_.setSearchMethod(kd_tree_);
     }
 
-    void setFittingParameters(float min_height, float max_height, float max_area, float max_ratio, float min_density)
+    void setFittingParameters(float min_height, float max_height, float max_area, float max_ratio, float min_density, float max_density)
     {
         min_height_ = min_height;
         max_height_ = max_height;
         max_area_ = max_area;
         max_ratio_ = max_ratio;
         min_density_ = min_density;
+        max_density_ = max_density;
     }    
     
     void setFeature(int id, float feature)
@@ -227,11 +231,12 @@ public:
     
     void addClusters(std::vector<pcl::PointIndices> clusters, int &start_id)
     {
-        TicToc tic_toc;
         id_to_idx_.clear();
+        TicToc tic_toc;
+
         for (size_t i = 0u; i < clusters.size(); ++i)
         {
-            Cluster cluster(min_height_, max_height_, max_area_, max_ratio_, min_density_);
+            Cluster cluster(min_height_, max_height_, max_area_, max_ratio_, min_density_, max_density_);
             cluster.id = (int) start_id++;
             id_to_idx_[cluster.id] = i;
             std::vector<int> indices = clusters[i].indices;

@@ -34,6 +34,18 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(OusterPointXYZIRT,
     (uint8_t, ring, ring) (uint16_t, noise, noise) (uint32_t, range, range)
 )
 
+struct CarlaPointXYZCIT {
+    PCL_ADD_POINT4D;
+    float CosAngle;
+    uint32_t ObjIdx;
+    uint32_t ObjTag;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+} EIGEN_ALIGN16;
+POINT_CLOUD_REGISTER_POINT_STRUCT(CarlaPointXYZCIT,
+    (float, x, x) (float, y, y) (float, z, z) (float, CosAngle, CosAngle)
+    (uint32_t, ObjIdx, ObjIdx) (uint32_t, ObjTag, ObjTag) 
+)
+
 // Use the Velodyne point format as a common representation
 using PointXYZIRT = VelodynePointXYZIRT;
 
@@ -73,6 +85,7 @@ private:
     pcl::PointCloud<PointXYZIRT>::Ptr laserCloudIn;
     pcl::PointCloud<PointType>::Ptr laserCloudInRaw;
     pcl::PointCloud<OusterPointXYZIRT>::Ptr tmpOusterCloudIn;
+    pcl::PointCloud<CarlaPointXYZCIT>::Ptr tmpCarlaCloudIn;
     pcl::PointCloud<PointType>::Ptr   fullCloud;
     pcl::PointCloud<PointType>::Ptr   extractedCloud;
 
@@ -97,6 +110,7 @@ private:
     ros::Publisher pub_meas_centroid;
     ros::Publisher pub_tracker_centroid;
     ros::Publisher pub_bbox;
+    ros::Publisher pub_associated_bbox;
     ros::Publisher pub_meas_cluster_info;
     ros::Publisher pub_tracker_cluster_info;
     ros::Publisher pub_ground_cloud;
@@ -133,8 +147,10 @@ public:
         pub_ground_cloud = nh.advertise<sensor_msgs::PointCloud2>("/segmentation/ground", 1);
         pub_nonground_cloud = nh.advertise<sensor_msgs::PointCloud2>("/segmentation/nonground", 1);
         pub_nonground_ds_cloud = nh.advertise<sensor_msgs::PointCloud2>("/segmentation/nonground_ds", 1);
-
         pub_static_scene = nh.advertise<sensor_msgs::PointCloud2>("/segmentation/static", 1);
+        
+        pub_associated_bbox = nh.advertise<jsk_recognition_msgs::BoundingBoxArray>("/exp/est_bbox", 1);
+        
         allocateMemory();
         resetParameters();
 
@@ -146,6 +162,7 @@ public:
         laserCloudIn.reset(new pcl::PointCloud<PointXYZIRT>());
         laserCloudInRaw.reset(new pcl::PointCloud<PointType>());
         tmpOusterCloudIn.reset(new pcl::PointCloud<OusterPointXYZIRT>());
+        tmpCarlaCloudIn.reset(new pcl::PointCloud<CarlaPointXYZCIT>());
         fullCloud.reset(new pcl::PointCloud<PointType>());
         extractedCloud.reset(new pcl::PointCloud<PointType>());
 
@@ -191,7 +208,7 @@ public:
 
         tracker_flag = false;
         meas_map.init(MEASUREMENT, maxR, maxZ, clusteringTolerance, minClusterSize, maxClusterSize);
-        meas_map.setFittingParameters(minHeight, maxHeight, maxArea, maxRatio, minDensity);
+        meas_map.setFittingParameters(minHeight, maxHeight, maxArea, maxRatio, minDensity, maxDensity);
         tracker_map.init(TRACKER, maxR, maxZ, 0.0, 0, 0);
     }
 
@@ -270,6 +287,7 @@ public:
     bool cachePointCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
     {
         // cache point cloud
+    
         cloudQueue.push_back(*laserCloudMsg);
         if (cloudQueue.size() <= 2)
             return false;
@@ -307,6 +325,26 @@ public:
                 dst.time = src.t * 1e-9f;
             }
         }
+        else if (sensor == SensorType::CARLA)
+        {
+            pcl::moveFromROSMsg(currentCloudMsg, *tmpCarlaCloudIn);
+            laserCloudIn->points.resize(tmpCarlaCloudIn->size());
+            laserCloudInRaw->points.resize(tmpCarlaCloudIn->size());
+            laserCloudIn->is_dense = tmpCarlaCloudIn->is_dense;
+            laserCloudInRaw->is_dense = tmpCarlaCloudIn->is_dense;
+            for (size_t i = 0; i < tmpCarlaCloudIn->size(); i++)
+            {
+                auto &src = tmpCarlaCloudIn->points[i];
+                auto &dst = laserCloudIn->points[i];
+                auto &dst_raw = laserCloudInRaw->points[i];
+                dst.x = src.x;
+                dst.y = src.y;
+                dst.z = src.z;
+                dst_raw.x = src.x;
+                dst_raw.y = src.y;
+                dst_raw.z = src.z;
+            }
+        }
         else
         {
             ROS_ERROR_STREAM("Unknown sensor type: " << int(sensor));
@@ -329,7 +367,7 @@ public:
             for (pcl::PointCloud<PointType>::iterator it = laserCloudInRaw->begin(); it != laserCloudInRaw->end(); it++) {
                 bool inside = (it->y >= -EGO_WIDTH/2.0 && it->y <= EGO_WIDTH/2.0) && (it->x <= EGO_LENGTH / 2.0 + 0.2 && it->x >= -EGO_LENGTH / 2.0 + 0.2);
                 size_t row_idx = getRowIndex(it->x, it->y, it->z, sensor_angles);
-                
+                // float range = sqrt(it->x*it->x + it->y*it->y + it->z*it->z);
                 if (!(isnan(it->x) || isnan(it->y) || isnan(it->z)) && !inside) {
                     if (row_idx % downsampleRate != 0)
                         continue;
@@ -357,61 +395,6 @@ public:
             laserCloudIn->is_dense = true;
             ROS_WARN("After removal size: %d\n", laserCloudIn->points.size());
         }
-
-
-        // if (dataType == "carla")
-        // {
-        //     float verticalAngle, horizonAngle, range;
-        //     size_t rowInd, columnIdn, index, cloudSize;
-        //     cloudSize = laserCloudIn->points.size();
-        //     pcl::PointCloud<PointXYZIRT>::Ptr laserFiltered(new pcl::PointCloud<PointXYZIRT>());
-            
-        //     std::vector<float> angles;
-        //     float resolution = (maxVertAngle - minVertAngle) / (N_SCAN-1);
-        //     for(int a = 0; a < N_SCAN; a++)
-        //         angles.push_back(minVertAngle + a*resolution);
-            
-
-        //     float EGO_WIDTH = 2.17;
-        //     float EGO_LENGTH = 4.809;
-
-        //     for (pcl::PointCloud<PointXYZIRT>::iterator it = laserCloudIn->begin(); it != laserCloudIn->end(); it++)
-        //     {
-        //         if (isnan(it->x) || isnan(it->y) || isnan(it->z))
-        //         {
-        //         }
-        //         else if((it->y >= -EGO_WIDTH/2.0 && it->y <= EGO_WIDTH/2.0) && (it->x <= EGO_LENGTH / 2.0 + 0.2 && it->x >= -EGO_LENGTH / 2.0 + 0.2))  // remove pointcloud for ego vehicle
-        //         {
-        //         }
-        //         else
-        //         {
-        //             PointXYZIRT thisPoint;
-        //             thisPoint.x = it->x;
-        //             thisPoint.y = it->y;
-        //             thisPoint.z = it->z;
-        //             verticalAngle = atan2(thisPoint.z, sqrt(thisPoint.x*thisPoint.x + thisPoint.y*thisPoint.y))*180/M_PI;
-        //             auto iter_geq = std::lower_bound(angles.begin(), angles.end(), verticalAngle);
-        //             if (iter_geq == angles.begin())
-        //             {
-        //                 rowInd = 0;
-        //             }
-        //             else
-        //             {
-        //                 float a = *(iter_geq - 1);
-        //                 float b = *(iter_geq);
-        //                 if (fabs(verticalAngle-a) < fabs(verticalAngle-b)){
-        //                     rowInd = iter_geq - angles.begin() - 1;
-        //                 } else {
-        //                     rowInd = iter_geq - angles.begin();
-        //                 }
-        //             }                    
-        //             it->ring = rowInd;
-        //             laserFiltered->points.push_back(*it);
-        //         }
-        //     }
-        //     *laserCloudIn = *laserFiltered;
-        //     laserCloudIn->is_dense = true;
-        // }
 
         // check dense flag
         if (laserCloudIn->is_dense == false)
@@ -797,15 +780,15 @@ public:
             return;
         
         meas_map.clear();
-        resetVisualization(cloudHeader.stamp, "odom");
+        resetVisualization(cloudHeader.stamp, odometryFrame);
 
         // 1. Ground segmentation
         pcl::PointCloud<PointType>::Ptr nonground(new pcl::PointCloud<PointType>());
         pcl::PointCloud<PointType>::Ptr ground(new pcl::PointCloud<PointType>());
         double patchwork_process_time;
         m_patchwork->estimate_ground(*cloud_in, *ground, *nonground, patchwork_process_time);
-        publishCloud(&pub_ground_cloud, ground, cloudHeader.stamp, "base_link");
-        publishCloud(&pub_nonground_cloud, nonground, cloudHeader.stamp, "base_link");
+        publishCloud(&pub_ground_cloud, ground, cloudHeader.stamp, lidarFrame);
+        publishCloud(&pub_nonground_cloud, nonground, cloudHeader.stamp, lidarFrame);
         printf("[Query] Ground: %d, Nonground: %d, time: %f\n", (int)ground->points.size(), (int)nonground->points.size(), patchwork_process_time);
         
         // 2. Reorder points so that nonground points come first
@@ -823,8 +806,8 @@ public:
         static tf::StampedTransform init_transform;
 
         try{
-            listener.waitForTransform("odom", "base_link", cloudHeader.stamp, ros::Duration(0.01));
-            listener.lookupTransform("odom", "base_link", cloudHeader.stamp, init_transform);
+            listener.waitForTransform(odometryFrame, lidarFrame, cloudHeader.stamp, ros::Duration(0.01));
+            listener.lookupTransform(odometryFrame, lidarFrame, cloudHeader.stamp, init_transform);
         } 
         catch (tf::TransformException ex){
             ROS_ERROR("no imu tf");
@@ -869,11 +852,11 @@ public:
         Eigen::Affine3f pose = pcl::getTransformation(xCur, yCur, zCur, rollCur, pitchCur, yawCur);
         pcl::transformPointCloud(*nonground_ds, *nonground_ds, pose);
 
-        publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, "odom");
+        publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, odometryFrame);
 
         // 5. Clustering and fitting box
         meas_map.buildMap(nonground_ds, used_id_cnt);
-        publishBoundingBox(&pub_bbox, meas_map, cloudHeader.stamp, "odom");
+        publishBoundingBox(&pub_bbox, meas_map, cloudHeader.stamp, odometryFrame);
 
         // 6. Init tracking
         TicToc tracking_time;
@@ -968,15 +951,19 @@ public:
         printf("meas size: %d, tracked size: %d\n", (int)target_meas.size(), (int)tracked.size());
         ROS_WARN("Tracking time: %f ms", tracking_time.toc());
         tracker_map.setMap(track_clusters);
-        publishClusteredCloud(&pub_meas_cluster, &pub_meas_centroid, &pub_meas_cluster_info, meas_map, cloudHeader.stamp, "odom");
-        publishClusteredCloud(&pub_tracker_cluster, &pub_tracker_centroid, &pub_tracker_cluster_info, tracker_map, cloudHeader.stamp, "odom");
+        publishClusteredCloud(&pub_meas_cluster, &pub_meas_centroid, &pub_meas_cluster_info, meas_map, cloudHeader.stamp, odometryFrame);
+        publishClusteredCloud(&pub_tracker_cluster, &pub_tracker_centroid, &pub_tracker_cluster_info, tracker_map, cloudHeader.stamp, odometryFrame);
     
         // 9. Removal
         std::map<int, int> tracker_to_meas = target_tracker.getAssociationMap();
         dynamicRemoval(tracker_to_meas, meas_clusters, track_clusters_map, nonground_local_ds, ordered, downsize_filter, nonground_size);        
         *cloud_in = *ordered;
         pcl::transformPointCloud(*ordered, *ordered, pose);
-        publishCloud(&pub_static_scene, ordered, cloudHeader.stamp, "odom");
+        publishCloud(&pub_static_scene, ordered, cloudHeader.stamp, odometryFrame);
+
+        // 10. Publish assoicated bounding box
+        publishAssociatedBoundingBox(&pub_associated_bbox, tracker_to_meas, meas_map, 
+                                     init_transform, cloudHeader.stamp, lidarFrame);
     }
 
     void dynamicRemoval(std::map<int, int> association_map,
@@ -1217,9 +1204,52 @@ public:
                     bbox_array.boxes.push_back(bbox);  
                 // }
             }
-            pub_bbox.publish(bbox_array);
+            thisPub->publish(bbox_array);
         }
     }
+
+    void publishAssociatedBoundingBox(ros::Publisher *this_pub, map<int, int> association_map, ClusterMap map, 
+                                      tf::StampedTransform tf_odom_baselink, ros::Time timestamp, string this_frame) {
+        if (this_pub->getNumSubscribers() != 0) {
+            jsk_recognition_msgs::BoundingBoxArray bbox_array;
+            bbox_array.header.stamp = timestamp;
+            bbox_array.header.frame_id = this_frame;
+            std::vector<Cluster> cluster_map = map.getMap();
+
+            for (size_t i = 0; i < cluster_map.size(); ++i) {
+                
+                int track_id = -1;
+                
+                for (const auto element : association_map) {
+                    if (element.second == cluster_map[i].id) {
+                        track_id = element.first;
+                        break;
+                    }
+                }
+
+                if (track_id >= 0) {
+                    jsk_recognition_msgs::BoundingBox bbox = cluster_map[i].bbox;
+                    // transform bbox from "odom" to "base_link"
+                    bbox.label = track_id;
+                    bbox.header.stamp = timestamp;
+                    bbox.header.frame_id = this_frame;
+                    tf::Transform t_odom_bbox;
+                    tf::poseMsgToTF(bbox.pose, t_odom_bbox);
+                    tf::Transform t_baselink_bbox = tf_odom_baselink.inverse() * t_odom_bbox;
+                    
+                    bbox.pose.position.x = t_baselink_bbox.getOrigin().x();
+                    bbox.pose.position.y = t_baselink_bbox.getOrigin().y();
+                    bbox.pose.position.z = t_baselink_bbox.getOrigin().z();
+                    bbox.pose.orientation.x = t_baselink_bbox.getRotation().x();
+                    bbox.pose.orientation.y = t_baselink_bbox.getRotation().y();
+                    bbox.pose.orientation.z = t_baselink_bbox.getRotation().z();
+                    bbox.pose.orientation.w = t_baselink_bbox.getRotation().w();
+                    bbox_array.boxes.push_back(bbox);
+                }
+            }
+            this_pub->publish(bbox_array);
+        }
+    } 
 
     void publishClouds()
     {
