@@ -34,7 +34,6 @@
 
 using namespace std;
 
-
 struct CarlaPointXYZCIT {
     PCL_ADD_POINT4D;
     float CosAngle;
@@ -52,6 +51,7 @@ using PointCarla = CarlaPointXYZCIT;
 class Track 
 {
     public:
+        bool seen;
         uint32_t gt_label;
         int pred_label;
         int type;
@@ -61,7 +61,7 @@ class Track
         int max_trk_cnt;
         float trk_ratio;
         
-        Track(uint32_t _gt_label, int _type): pred_label(-1), out_cnt(0), in_cnt(0), trk_cnt(0), max_trk_cnt(0), trk_ratio(0)
+        Track(uint32_t _gt_label, int _type): pred_label(-1), out_cnt(0), in_cnt(0), trk_cnt(0), max_trk_cnt(0), trk_ratio(0), seen(false)
         {
             gt_label = _gt_label;
             type = _type;
@@ -84,6 +84,25 @@ class Track
         }
 };
 
+class Statistics
+{
+    public: 
+        std::vector<int> FN;
+        std::vector<int> FP;
+        std::vector<int> SWC;
+        std::vector<int> GT;
+        std::vector<float> MOTA;
+        std::vector<int> FRAG;
+        std::vector<float> trk_ratio;
+        int t_FN = 0, t_FP = 0, t_SWC = 0, t_GT = 0;
+        float t_MOTA = 0.0;
+        int t_FRAG = 0;
+        int MT = 0; // mostly tracked
+        int PT = 0; // partially tracked
+        int ML = 0; // mostly lost
+        Statistics() {}
+};
+
 class Experiment
 {
     public:
@@ -92,7 +111,8 @@ class Experiment
         tf::StampedTransform t_world_start;
         
         // params
-        string save_dir;
+        string slam_save_dir;
+        string trk_save_dir;
         string odom_topic;
         bool eval_slam;
         bool eval_tracking;
@@ -110,7 +130,7 @@ class Experiment
         ros::Subscriber sub_gt_bbox;
         ros::Publisher pub_gt_bbox;
         ros::Publisher pub_trk_cloud;
-
+        ros::Publisher pub_cmp_bbox;
 
         // SLAM
         ros::Publisher pub_gt_odom;
@@ -136,13 +156,9 @@ class Experiment
         // tracking params
         float lidar_scope;
         int max_out_cnt;
+        int min_pt_cnt;
 
-        // total counts
-        int t_false_neg = 0;
-        int t_false_pos = 0;
-        int t_frag = 0;
-        int t_switch = 0;
-        int t_gt_cnt = 0;
+        Statistics stat;
 
     Experiment() {
 
@@ -150,12 +166,14 @@ class Experiment
 
         first_odom_in = false;
 
-        nh.param<string>("experiment/save_dir", save_dir, "/home/euigon/experiment/traj_result/");
+        nh.param<string>("experiment/slam_save_dir", slam_save_dir, "/home/euigon/experiment/traj_result/");
+        nh.param<string>("experiment/trk_save_dir", trk_save_dir, "/home/euigon/experiment/trk_result/");
         nh.param<string>("lio_sam/odomTopic", odom_topic, "odometry");
         nh.param<bool>("experiment/eval_tracking", eval_tracking, false);
         nh.param<bool>("experiment/eval_slam", eval_slam, false);
         nh.param<float>("experiment/lidar_scope", lidar_scope, 40.0);
         nh.param<int>("experiment/max_out_cnt", max_out_cnt, 10);
+        nh.param<int>("experiment/min_pt_cnt", min_pt_cnt, 10);
 
         t_ego_lidar = tf::Transform(tf::createQuaternionFromYaw(0.0), tf::Vector3(-0.2, 0.0, 1.9));        
         
@@ -165,7 +183,8 @@ class Experiment
         sub_est_bbox = nh.subscribe<jsk_recognition_msgs::BoundingBoxArray>("/exp/est_bbox", 2000, &Experiment::estBoundingBoxCallback, this, ros::TransportHints().tcpNoDelay());
         sub_gt_bbox = nh.subscribe<derived_object_msgs::ObjectArray>("/carla/objects", 2000, &Experiment::objectCallback, this, ros::TransportHints().tcpNoDelay());
         pub_gt_bbox = nh.advertise<jsk_recognition_msgs::BoundingBoxArray>("/exp/gt_bbox", 1);
-        
+        pub_cmp_bbox = nh.advertise<jsk_recognition_msgs::BoundingBoxArray>("/exp/cmp_bbox", 1);
+
         // slam
         pub_gt_odom = nh.advertise<nav_msgs::Odometry>("/exp/gt_odom", 1);
         pub_estimated_odom = nh.advertise<nav_msgs::Odometry>("/exp/est_odom", 1);
@@ -176,21 +195,25 @@ class Experiment
         sub_tf = nh.subscribe<tf2_msgs::TFMessage>("/tf", 2000, &Experiment::tfCallback, this, ros::TransportHints().tcpNoDelay());
         
         if (eval_slam) {
-            ofstream gt_output(save_dir + gt_file);
-            ofstream est_output(save_dir + est_file);
-
+            ofstream gt_output(slam_save_dir + gt_file);
+            ofstream est_output(slam_save_dir + est_file);
             gt_output.close();
             est_output.close();
+        }
+
+        if (eval_tracking) {
+            ofstream trk_output(trk_save_dir + "result.txt");
+            trk_output.close();
         }
     }
 
     ~Experiment() {
         if (eval_slam) {
             std::cout<<"\033[1;32m"<< "You pressed Ctrl+C..." <<"\033[0m"<<std::endl;
-            std::cout<<"\033[1;32m"<< "Saving to " << save_dir << "\033[0m"<<std::endl;
+            std::cout<<"\033[1;32m"<< "Saving to " << slam_save_dir << "\033[0m"<<std::endl;
 
-            std::ofstream est_output(save_dir + est_file, std::ios::app);
-            std::ofstream gt_output(save_dir + gt_file, std::ios::app);
+            std::ofstream est_output(slam_save_dir + est_file, std::ios::app);
+            std::ofstream gt_output(slam_save_dir + gt_file, std::ios::app);
 
             for (nav_msgs::Odometry pose_it : groundtruth_poses){
 
@@ -221,7 +244,42 @@ class Experiment
         }
 
         if (eval_tracking) {
-            printResult();
+            std::cout<<"\033[1;32m"<< "You pressed Ctrl+C..." <<"\033[0m"<<std::endl;
+            std::cout<<"\033[1;32m"<< "Saving to " << trk_save_dir << "\033[0m"<<std::endl;
+
+            std::ofstream trk_output(trk_save_dir + "result.txt", std::ios::app);
+            
+            for (size_t i = 0; i < stat.FN.size(); i++) {
+                trk_output << stat.FN[i]<<" "<<stat.FP[i]<<" "<< stat.SWC[i]<<" "<<stat.GT[i]<<" "<<stat.MOTA[i]<<" "<<stat.FRAG[i];
+                trk_output << std::endl;
+            }
+            trk_output << "CLEAR metric: " << std::endl;
+            trk_output << stat.t_FN<<" "<<stat.t_FP<<" "<<stat.t_SWC<<" "<<stat.t_GT<<" "<< 1-(float)(stat.t_FP+stat.t_FN+stat.t_SWC)/stat.t_GT << std::endl;
+            
+            cout << "Seen: " << endl;
+            for (auto track : track_table) {
+                if (track.second.seen) {
+                    std::cout << track.second.gt_label << std::endl;
+                    if (track.second.trk_ratio >= 0.8)
+                        stat.MT++;
+                    else if (track.second.trk_ratio >= 0.2 && track.second.trk_ratio < 0.8) 
+                        stat.PT++;
+                    else if (track.second.trk_ratio < 0.2 && track.second.trk_ratio >= 0)
+                        stat.ML++;
+                }
+            }
+            trk_output << "Quality: " << std::endl;
+            trk_output << stat.MT << " " << stat.PT << " " << stat.ML << " " << stat.t_FRAG << std::endl;
+
+
+            std::cout << "CLEAR metric: " << std::endl;
+            std::cout << stat.t_FN<<" "<<stat.t_FP<<" "<<stat.t_SWC<<" "<<stat.t_GT<<" "<< 1-(float)(stat.t_FP+stat.t_FN+stat.t_SWC)/stat.t_GT << std::endl;
+            std::cout << "Quality: " << std::endl;
+            std::cout << stat.MT << " " << stat.PT << " " << stat.ML << " " << stat.t_FRAG << std::endl;
+
+            trk_output.close();
+            std::cout<<"\033[1;32m"<< "Done..." <<"\033[0m"<<std::endl;
+
             exit(1);
         }
 
@@ -398,9 +456,13 @@ class Experiment
         for (size_t i = 0; i < cur_bbox_array.boxes.size(); i++) {
             cur_bbox_array.boxes[i].header.frame_id = "old_lidar_link";
         }
-        pub_trk_cloud.publish(current_cloud);
-        pub_trk_est_bbox.publish(cur_bbox_array);
-        pub_gt_bbox.publish(gt_bbox);
+
+        if (pub_trk_cloud.getNumSubscribers() != 0)
+            pub_trk_cloud.publish(current_cloud);
+        if (pub_trk_est_bbox.getNumSubscribers() != 0)
+            pub_trk_est_bbox.publish(cur_bbox_array);   
+        if (pub_gt_bbox.getNumSubscribers() != 0)
+            pub_gt_bbox.publish(gt_bbox);
 
         /* ----------------------
          * START EVALUATION
@@ -410,6 +472,9 @@ class Experiment
         int c_false_neg = 0;
         int c_id_switch = 0; 
         int c_gt_cnt = 0;
+
+        jsk_recognition_msgs::BoundingBoxArray inside_scope_bbox;
+        inside_scope_bbox.header = gt_bbox.header;
 
         for (auto gt : gt_bbox.boxes) {
             float dist = sqrt(
@@ -423,8 +488,10 @@ class Experiment
             if (it != track_table.end()) // exist
                 *cur_tracker = track_table[gt.label];
 
-            if (dist <= lidar_scope) { // and there is enough point cloud inside the bounding box
+            if (dist <= lidar_scope && dist >= 1.5 && insideBBOX(current_cloud, gt)) { 
+                inside_scope_bbox.boxes.push_back(gt);
                 c_gt_cnt++;
+                cur_tracker->seen = true;
                 cur_tracker->in_cnt++;
                 cur_tracker->out_cnt = 0;
                 
@@ -489,19 +556,57 @@ class Experiment
         // False positive
 
         // update overall metric
-        t_false_neg += c_false_neg;
-        t_false_pos += c_false_pos;
-        t_frag += c_fragmentation;
-        t_switch += c_id_switch;
-        t_gt_cnt += c_gt_cnt;
+        stat.t_FN += c_false_neg;
+        stat.t_FP += c_false_pos;
+        stat.t_FRAG += c_fragmentation;
+        stat.t_SWC += c_id_switch;
+        stat.t_GT += c_gt_cnt;
+        stat.FN.push_back(c_false_neg);
+        stat.FP.push_back(c_false_pos);
+        stat.FRAG.push_back(c_fragmentation);
+        stat.SWC.push_back(c_id_switch);
+        stat.GT.push_back(c_gt_cnt);
+        stat.MOTA.push_back(1 - float(c_false_pos + c_false_neg + c_id_switch) / c_gt_cnt);
         cout << "FN: " << c_false_neg << " FP: " << c_false_pos << " Frag: " << c_fragmentation << " Switch: " << c_id_switch << " gt: " << c_gt_cnt << endl;
         cout << "MOTA: " << 1-(c_false_pos + c_false_neg + c_id_switch) / (float)c_gt_cnt << endl;
+    
+        if (pub_cmp_bbox.getNumSubscribers() != 0)
+            pub_cmp_bbox.publish(inside_scope_bbox);
     }
 
-    void printResult() {
-        cout << "Tracking Evaluation: "<< endl;
-        cout << "FN: " << t_false_neg << " FP: " << t_false_pos << " Frag: " << t_frag << " Switch: " << t_switch << " gt: " << t_gt_cnt << endl;
-        cout << "MOTA: " << 1-(t_false_pos + t_false_neg + t_switch) / (float)t_gt_cnt << endl;      
+    bool insideBBOX(sensor_msgs::PointCloud2 this_cloud, jsk_recognition_msgs::BoundingBox this_bbox) {
+        // 2. convert current semantic point cloud to pcl
+        pcl::PointCloud<PointCarla>::Ptr pcl_cloud(new pcl::PointCloud<PointCarla>());
+        pcl::moveFromROSMsg(this_cloud, *pcl_cloud);
+        tf::Quaternion quat;
+        tf::quaternionMsgToTF(this_bbox.pose.orientation, quat);        
+        tf::Matrix3x3 rot_mat(quat);
+        double roll, pitch, yaw;
+        rot_mat.getRPY(roll, pitch, yaw);   
+        
+        float offset_x;
+        float offset_y;
+        float rot_x;
+        float rot_y;
+        int cnt = 0;
+        for (auto pt : pcl_cloud->points) {
+            offset_x = pt.x - this_bbox.pose.position.x;
+            offset_y = pt.y - this_bbox.pose.position.y;
+            rot_x = offset_x*cos(-yaw) - offset_y*sin(-yaw);
+            rot_y = offset_x*sin(-yaw) + offset_y *cos(-yaw);
+            if (rot_x >= -this_bbox.dimensions.x / 2.0 && 
+                rot_x <= this_bbox.dimensions.x / 2.0 && 
+                rot_y >= -this_bbox.dimensions.y / 2.0 &&
+                rot_y <= this_bbox.dimensions.y / 2.0) {
+                cnt++;
+            }
+            if (cnt >= min_pt_cnt) {
+                return true;
+            }
+        }
+        // cout << "Inside: " << endl;
+        // cout << "Center: " << this_bbox.pose.position.x << " " << this_bbox.pose.position.y << " " << this_bbox.pose.position.z << " count: " << cnt << endl;
+        return false;
     }
 
     void bboxToVerticies(jsk_recognition_msgs::BoundingBox bbox, vector<IOU::Point> &vertices) {

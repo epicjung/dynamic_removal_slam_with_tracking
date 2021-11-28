@@ -1,7 +1,7 @@
 <launch>
 
     <node pkg="experiment" type="exp_node" name="exp_node" output="screen">
-        <rosparam file="$(find lio_sam)/config/params_carla.yaml" command="load"/>
+        <rosparam file="$(find lio_sam)/config/seq00.yaml" command="load"/>
     </node>
 
 </launch>

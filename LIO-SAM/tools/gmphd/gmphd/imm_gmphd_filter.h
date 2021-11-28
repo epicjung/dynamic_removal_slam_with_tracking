@@ -440,7 +440,7 @@ namespace gmphd
       m_uncertainty2.clear();
       m_covariance2.clear();
       // Show trackers
-      showTrackerList();
+      // showTrackerList();
     }
 
     void reset()
@@ -777,7 +777,7 @@ namespace gmphd
           [meas_id](const auto &element){return element.second == meas_id;});
         if (result == associated.end()) // not matched
         {
-          size_t gauss_idx = m_nPredTargets * k + birth_idx;
+          size_t gauss_idx = m_nPredTargets * (k+1) + birth_idx;
           // printf("Birth idx: %d, Gauss_idx: %d, exp size: %d\n", birth_idx, gauss_idx, m_expTargets->m_gaussians.size());
           GaussianModel<S> birth_gaussian = m_currTargets->m_gaussians[gauss_idx];
 
@@ -788,8 +788,8 @@ namespace gmphd
           assert(birth_gaussian.m_track_id >= 0);
           pruned_targets.m_gaussians.emplace_back(birth_gaussian);
           pruned_targets.m_gaussians2.emplace_back(birth_gaussian);
-            printf("Meas id: %d, %f;%f;0.0   birth gaussian: %d, %f; %f; 0.0   weight: %f\n", 
-          meas_id, m_measTargets->m_gaussians[k].m_mean[0], m_measTargets->m_gaussians[k].m_mean[1],
+          printf("New track id: %d, meas_id: %d, %f;%f;0.0   birth gaussian: %d, %f; %f; 0.0   weight: %f\n", 
+          birth_gaussian.m_track_id, meas_id, m_measTargets->m_gaussians[k].m_mean[0], m_measTargets->m_gaussians[k].m_mean[1],
           birth_gaussian.m_track_id, birth_gaussian.m_mean[0], birth_gaussian.m_mean[1], birth_gaussian.m_weight);
         }
       }

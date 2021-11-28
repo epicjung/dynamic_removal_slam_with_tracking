@@ -17,6 +17,7 @@ Panels:
         - /evaluation1/Tracking1
         - /evaluation1/Tracking1/Estimated1
         - /evaluation1/Tracking1/Ground-truth1
+        - /evaluation1/Tracking1/Compared1
         - /evaluation1/SLAM1
         - /evaluation1/SLAM1/gt1/Shape1
         - /evaluation1/SLAM1/est1/Shape1
@@ -394,8 +395,8 @@ Visualization Manager:
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
-            Max Value: 20.802837371826172
-            Min Value: -0.03934507071971893
+            Max Value: 1.7572399377822876
+            Min Value: -1.602110505104065
             Value: true
           Axis: Z
           Channel Name: intensity
@@ -443,7 +444,7 @@ Visualization Manager:
           Color: 252; 233; 79
           Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: false
+          Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -458,7 +459,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: false
+          Value: true
         - Alpha: 0.6000000238418579
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -717,11 +718,23 @@ Visualization Manager:
               coloring: Label
               line width: 0.10000000149011612
               only edge: false
+              show coords: true
+            - Class: jsk_rviz_plugin/BoundingBoxArray
+              Enabled: false
+              Name: Ground-truth
+              Topic: /exp/gt_bbox
+              Unreliable: false
+              Value: false
+              alpha: 1
+              color: 25; 255; 0
+              coloring: Label
+              line width: 0.10000000149011612
+              only edge: true
               show coords: false
             - Class: jsk_rviz_plugin/BoundingBoxArray
               Enabled: true
-              Name: Ground-truth
-              Topic: /exp/gt_bbox
+              Name: Compared
+              Topic: /exp/cmp_bbox
               Unreliable: false
               Value: true
               alpha: 1
@@ -858,25 +871,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 40.03644943237305
+      Distance: 19.972434997558594
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 3.6803154945373535
-        Y: -1.9577423334121704
-        Z: 1.3545305728912354
+        X: 0
+        Y: 0
+        Z: 0
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
-      Target Frame: base_link
+      Pitch: 1.340397834777832
+      Target Frame: old_lidar_link
       Value: Orbit (rviz)
-      Yaw: 2.6703908443450928
+      Yaw: 2.2903974056243896
     Saved: ~
 Window Geometry:
   Displays:

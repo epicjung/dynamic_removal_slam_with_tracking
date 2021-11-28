@@ -28,7 +28,7 @@ lio_sam:
   sensor: carla                            # lidar sensor type, either 'velodyne' or 'ouster' or 'carla'
   N_SCAN: 64                                  # number of lidar channel (i.e., 16, 32, 64, 128)
   Horizon_SCAN: 1800                          # lidar horizontal resolution (Velodyne:1800, Ouster:512,1024,2048)
-  downsampleRate: 1                           # default: 1. Downsample your data if too many points. i.e., 16 = 64 / 4, 16 = 16 / 1
+  downsampleRate: 2                           # default: 1. Downsample your data if too many points. i.e., 16 = 64 / 4, 16 = 16 / 1
   lidarMinRange: 0.1                          # default: 1.0, minimum lidar range to be used
   lidarMaxRange: 50.0                       # default: 1000.0, maximum lidar range to be used
   minAngle: -26.8
@@ -98,7 +98,7 @@ tracking:
     maxZ: 3.0
     minZ: -10.0
     maxR: 100.0
-    clusteringTolerance: 0.7 # opt 0.5
+    clusteringTolerance: 1.0 # opt 0.5
     minClusterSize: 5 # opt 4
     maxClusterSize: 3000 # opt 5000
     graphDistThres: 0.3
@@ -106,8 +106,8 @@ tracking:
 
   # GMPHD filter
   filter:
-    meanXBirth: 500.0
-    meanYBirth: 500.0
+    meanXBirth: 500.0 # opt: 500
+    meanYBirth: 500.0 # opt: 500
     varPoseBirth: 2500
     varVelBirth: 2500
     weightBirth: 0.2
@@ -118,7 +118,7 @@ tracking:
     detectionProb: 1.0
     measPoseNoise: 1.0
     measSpeedNoise: 4.0
-    pruneThres: 0.2
+    pruneThres: 0.2 # opt: 0.2
     pruneMergeThres: 0.0005 # opt: 0.0005
     maxGaussian: 150
     survivalProb: 1.0
@@ -126,7 +126,7 @@ tracking:
 
   # L-Shape fitting
   lshape:
-    minHeight: 0.4 # opt: 0.5
+    minHeight: 0.3 # opt: 0.5
     maxHeight: 3.0
     maxArea: 30.0 
     maxRatio: 9.0
@@ -145,11 +145,13 @@ removal:
 # EXPERIMENT
 # ----------------------
 experiment:
-  save_dir: "/home/euigon/experiment/traj_result_dynamic/"
+  slam_save_dir: "/home/euigon/experiment/traj_result_dynamic/"
+  trk_save_dir: "/home/euigon/experiment/trk_result/"
   eval_tracking: true
   eval_slam: false
   max_out_cnt: 20
   lidar_scope: 40.0
+  min_pt_cnt: 30
   
 
 # Navsat (convert GPS coordinates to Cartesian)
