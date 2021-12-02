@@ -89,6 +89,9 @@ lio_sam:
   globalMapVisualizationPoseDensity: 10.0       # meters, global map visualization keyframe density
   globalMapVisualizationLeafSize: 1.0           # meters, global map visualization cloud density
 
+cluster_debug: false
+tracking_debug: false
+
 # ----------------------
 # TRACKING
 # ----------------------
@@ -101,8 +104,11 @@ tracking:
     clusteringTolerance: 1.0 # opt 0.5
     minClusterSize: 5 # opt 4
     maxClusterSize: 3000 # opt 5000
-    graphDistThres: 0.3
+    graphDistThres: 0.7 # horizontal
+    graphMergeThres: 1.0 # vertical
+    graphLookupSize: 6
     graphAngleThres: 20.0
+    searchWindowSize: 4
 
   # GMPHD filter
   filter:
@@ -152,6 +158,7 @@ experiment:
   max_out_cnt: 20
   lidar_scope: 40.0
   min_pt_cnt: 30
+  gnd_ratio: 0.9
   
 
 # Navsat (convert GPS coordinates to Cartesian)

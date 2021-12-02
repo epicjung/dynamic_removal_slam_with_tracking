@@ -15,6 +15,7 @@ public:
     int id;
     pcl::PointCloud<PointType> cloud;
     jsk_recognition_msgs::BoundingBox bbox;
+    jsk_recognition_msgs::BoundingBox bbox_MAR;
     double centroid_x;
     double centroid_y;
     double centroid_z;
@@ -83,8 +84,8 @@ public:
         PointType min_pt, max_pt;
         pcl::getMinMax3D(cloud, min_pt, max_pt);
         float height = max_pt.z - min_pt.z;
-        printf("%d------%d\n", id, (int)cloud.points.size());
-        printf("height: %f\n", height);
+        // printf("%d------%d\n", id, (int)cloud.points.size());
+        // printf("height: %f\n", height);
         m_height = height;
         if (height < m_min_height || height > m_max_height)
             return;
@@ -98,19 +99,19 @@ public:
         LShapedFIT lshaped;
         TicToc tic_toc;
         cv::RotatedRect rrect = lshaped.FitBox(&hull);
-        printf("time: %f\n", tic_toc.toc());
-        std::cout << "Shaped-BBox Message : " << rrect.size.width << " " << rrect.size.height << " " << rrect.angle << std::endl;
-        
+
+        // printf("time: %f\n", tic_toc.toc());
+
         // check area
         float area = rrect.size.width * rrect.size.height;
-        printf("area: %f\n", area);
+        // printf("area: %f\n", area);
         m_area = area;
         if (area > m_max_area) 
             return;
         
         // check ratio
         float ratio = rrect.size.height > rrect.size.width ? rrect.size.height / rrect.size.width : rrect.size.width / rrect.size.height;
-        printf("ratio: %f\n", ratio);
+        // printf("ratio: %f\n", ratio);
         m_ratio = ratio;
         if (ratio >= m_max_ratio) {
             // if(rrect.size.height > 1.0 || rrect.size.width > 1.0)
@@ -118,7 +119,7 @@ public:
         }
 
         float density = cloud.points.size() / (rrect.size.width * rrect.size.height * height);
-        printf("density: %f\n", density);
+        // printf("density: %f\n", density);
         m_density = density;
         if (density < m_min_density || density > m_max_density) 
             return;
@@ -140,6 +141,27 @@ public:
         bbox.value = 0.0;
         tf::Quaternion quat = tf::createQuaternionFromYaw(rrect.angle * M_PI / 180.0);
         tf::quaternionTFToMsg(quat, bbox.pose.orientation);
+
+        // // experiment
+        // lshaped.setCriterion(LShapedFIT::Criterion::AREA);
+        // cv::RotatedRect rrect_MAR = lshaped.FitBox(&hull);
+        // std::vector<cv::Point2f> vertices_MAR = lshaped.getRectVertex();
+        // cv::Point3f center_MAR;
+        // center_MAR.z = (max_pt.z + min_pt.z) / 2.0;
+        // for (size_t i = 0; i < vertices_MAR.size(); ++i)
+        // {
+        //     center_MAR.x += vertices_MAR[i].x / vertices_MAR.size();
+        //     center_MAR.y += vertices_MAR[i].y / vertices_MAR.size();
+        // }
+        // bbox_MAR.pose.position.x = center_MAR.x;
+        // bbox_MAR.pose.position.y = center_MAR.y;
+        // bbox_MAR.pose.position.z = center_MAR.z;
+        // bbox_MAR.dimensions.x = rrect_MAR.size.width;
+        // bbox_MAR.dimensions.y = rrect_MAR.size.height;
+        // bbox_MAR.dimensions.z = height;
+        // bbox_MAR.value = -100.0;
+        // quat = tf::createQuaternionFromYaw(rrect_MAR.angle * M_PI / 180.0);
+        // tf::quaternionTFToMsg(quat, bbox_MAR.pose.orientation);
     }
 };
 
@@ -224,7 +246,7 @@ public:
         cluster_indices_.clear();
         cluster_extractor_.setInputCloud(cloud_map_);
         cluster_extractor_.extract(cluster_indices_);
-        printf("Points: %d, # of segments: %d\n", cloud_map_->points.size(), (int)cluster_indices_.size());
+        // printf("Points: %d, # of segments: %d\n", cloud_map_->points.size(), (int)cluster_indices_.size());
         ROS_WARN("Clustering: %f ms", tic_toc.toc());
         addClusters(cluster_indices_, start_id);
     }

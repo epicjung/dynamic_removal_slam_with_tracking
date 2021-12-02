@@ -8,31 +8,6 @@
 class LShapedFIT
 {
 public:
-    LShapedFIT();
-
-    ~LShapedFIT();
-	
-    // For Each Cluster.
-    cv::RotatedRect FitBox(std::vector<cv::Point2f>* pointcloud_ptr);
-
-    std::vector<cv::Point2f> getRectVertex();
-
-private:
-    // Different Criterion For Cluster BBox.
-    double calc_area_criterion(const cv::Mat& c1, const cv::Mat& c2);
-
-    double calc_nearest_criterion(const cv::Mat& c1, const cv::Mat& c2);
-
-    double calc_variances_criterion(const cv::Mat& c1, const cv::Mat& c2);
-
-    double calc_var(const std::vector<double>& v);
-
-    void calc_cross_point(const double a0, const double a1, const double b0, const double b1, const double c0,
-                          const double c1, double& x, double& y);
-
-    cv::RotatedRect calc_rect_contour();
-
-public:
     enum Criterion
     {
         AREA,
@@ -52,6 +27,34 @@ private:
 
     std::vector<cv::Point2f> vertex_pts_;
     cv::Point2f              hot_pt_;
+
+public:
+    LShapedFIT();
+
+    ~LShapedFIT();
+	
+    // For Each Cluster.
+    cv::RotatedRect FitBox(std::vector<cv::Point2f>* pointcloud_ptr);
+
+    std::vector<cv::Point2f> getRectVertex();
+
+    void setCriterion(LShapedFIT::Criterion criterion); 
+
+private:
+    // Different Criterion For Cluster BBox.
+    double calc_area_criterion(const cv::Mat& c1, const cv::Mat& c2);
+
+    double calc_nearest_criterion(const cv::Mat& c1, const cv::Mat& c2);
+
+    double calc_variances_criterion(const cv::Mat& c1, const cv::Mat& c2);
+
+    double calc_var(const std::vector<double>& v);
+
+    void calc_cross_point(const double a0, const double a1, const double b0, const double b1, const double c0,
+                          const double c1, double& x, double& y);
+
+    cv::RotatedRect calc_rect_contour();
+
 
 };  // class LShapedFIT
 

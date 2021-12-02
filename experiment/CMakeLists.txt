@@ -34,6 +34,6 @@ include_directories(
  src
 )
 
-add_executable(exp_node src/experiment_slam.cpp src/iou.cpp src/iou.h)
+add_executable(exp_node src/experiment.cpp src/iou.cpp src/iou.h)
 add_dependencies(exp_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(exp_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})

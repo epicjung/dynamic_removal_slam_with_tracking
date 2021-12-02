@@ -158,6 +158,9 @@ public:
     float globalMapVisualizationPoseDensity;
     float globalMapVisualizationLeafSize;
 
+    bool cluster_debug;
+    bool tracking_debug;
+
     // tracking
     float nongroundDownsample;
     float maxZ;
@@ -168,6 +171,9 @@ public:
     int maxClusterSize;
     float graphDistThres;
     float graphAngleThres;
+    float graphMergeThres;
+    int graphLookupSize;
+    int searchWindowSize;
 
     // removal
     float velThres;
@@ -300,6 +306,9 @@ public:
         nh.param<float>("lio_sam/globalMapVisualizationPoseDensity", globalMapVisualizationPoseDensity, 10.0);
         nh.param<float>("lio_sam/globalMapVisualizationLeafSize", globalMapVisualizationLeafSize, 1.0);
 
+        nh.param<bool>("cluster_debug", cluster_debug, false);
+        nh.param<bool>("tracking_debug", tracking_debug, false);
+
         nh.param<float>(  "tracking/clustering/nongroundDownsample", nongroundDownsample, 0.2);
         nh.param<float>(  "tracking/clustering/maxZ", maxZ, 10.0);
         nh.param<float>(  "tracking/clustering/minZ", minZ, 10.0);
@@ -309,6 +318,9 @@ public:
         nh.param<int>(  "tracking/clustering/maxClusterSize", maxClusterSize, 1.0);
         nh.param<float>(  "tracking/clustering/graphDistThres", graphDistThres, 1.0);
         nh.param<float>(  "tracking/clustering/graphAngleThres", graphAngleThres, 1.0);
+        nh.param<float>(  "tracking/clustering/graphMergeThres", graphMergeThres, 1.0);
+        nh.param<int>(  "tracking/clustering/graphLookupSize", graphLookupSize, 3);
+        nh.param<int>(  "tracking/clustering/searchWindowSize", searchWindowSize, 3);
 
         
         nh.param<float>(  "tracking/filter/meanXBirth", meanXBirth, 1e3);

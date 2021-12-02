@@ -19,6 +19,11 @@ LShapedFIT::~LShapedFIT()
 {
 }
 
+void LShapedFIT::setCriterion(LShapedFIT::Criterion criterion) 
+{
+    criterion_ = criterion;
+}
+
 cv::RotatedRect LShapedFIT::FitBox(std::vector<cv::Point2f>* pointcloud_ptr)
 {
     std::vector<cv::Point2f>& points = *pointcloud_ptr;
