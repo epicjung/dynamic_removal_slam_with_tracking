@@ -97,15 +97,16 @@ tracking_debug: false
 # ----------------------
 tracking:
   clustering: 
+    method: "graph" # 'euclidean' or 'graph'
     nongroundDownSample: 0.05 # opt: 0.05
     maxZ: 3.0
     minZ: -10.0
     maxR: 100.0
     clusteringTolerance: 1.0 # opt 0.5
     minClusterSize: 5 # opt 4
-    maxClusterSize: 3000 # opt 5000
+    maxClusterSize: 5000 # opt 5000
     graphDistThres: 0.7 # horizontal
-    graphMergeThres: 1.0 # vertical
+    graphMergeThres: 1.2 # vertical
     graphLookupSize: 6
     graphAngleThres: 20.0
     searchWindowSize: 4

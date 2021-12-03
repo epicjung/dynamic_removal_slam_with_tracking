@@ -34,7 +34,6 @@ class Point
         Point() : valid(false), first_label(-1), final_label(-1), label(0) {}
 };
 
-
 class GraphCluster : public ParamServer
 {
     private:

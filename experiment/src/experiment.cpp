@@ -524,11 +524,11 @@ class Experiment
                 }
 
                 // one or more candidates inside gt_bbox
-                cout << "gt: " << gt.pose.position.x << ";"<<gt.pose.position.y << ";"<<gt.pose.position.z << endl;
+                // cout << "gt: " << gt.pose.position.x << ";"<<gt.pose.position.y << ";"<<gt.pose.position.z << endl;
                 if (candidates.size() >= 1) {
                     if (candidates.size() > 1) {
                         c_fragmentation += (candidates.size() - 1);
-                        c_false_pos += (candidates.size() - 1);
+                        c_false_pos += (candidates.size() - 1); // include this?
                     }
                     
                     // set id of highest iou bbox to gt_bbox's id
@@ -553,7 +553,7 @@ class Experiment
                     c_false_neg++;
                 }
                 cur_tracker->trk_ratio = cur_tracker->max_trk_cnt / (float)cur_tracker->in_cnt;
-                cur_tracker->print();
+                // cur_tracker->print();
             } else { // outside tracking range
                 cur_tracker->out_cnt++;
                 if (cur_tracker->out_cnt > max_out_cnt) { // ~2 seconds -> reset

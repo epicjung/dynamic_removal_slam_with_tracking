@@ -2,7 +2,7 @@
 #include "lio_sam/cloud_info.h"
 #include "imm_gmphd_filter.h"
 #include "cluster.h"
-#include "graph_cluster.h"
+// #include "graph_cluster.h"
 #include "TMAP/patchwork_obstacle.hpp"
 
 struct VelodynePointXYZIRT
@@ -837,11 +837,14 @@ public:
         *nonground_local_ds = *nonground_ds;
 
         // Fast clustering test
-        TicToc graph_time;
         vector<vector<int>> clusters;
-        graph_cluster->setInputCloud2(nonground_ds, clusters);
-        // graph_cluster->extract();
-        ROS_WARN("Graph extraction time: %f ms\n", graph_time.toc());
+
+        if (clustering_method == "graph") {
+            TicToc graph_time;
+            graph_cluster->setInputCloudGraph(nonground_ds);
+            ROS_WARN("Graph cluster time: %f ms\n", graph_time.toc());
+        }
+         
         publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, lidarFrame);
 
         // 4. Get initial pose
@@ -857,7 +860,12 @@ public:
         // publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, odometryFrame);
 
         // 5. Clustering and fitting box
-        meas_map.buildMap(nonground_ds, used_id_cnt);
+        if (clustering_method == "euclidean")
+            meas_map.buildMap(nonground_ds, used_id_cnt);
+        else 
+            meas_map.buildGraphMap(graph_cluster->runs, nonground_ds, used_id_cnt);
+        
+        publishClusteredCloud(&pub_meas_cluster, &pub_meas_centroid, &pub_meas_cluster_info, meas_map, cloudHeader.stamp, odometryFrame);
         publishBoundingBox(&pub_bbox, meas_map, cloudHeader.stamp, odometryFrame);
         publishMARBoundingBox(&pub_MAR_bbox, meas_map, cloudHeader.stamp, odometryFrame);
         // 6. Init tracking
@@ -959,7 +967,6 @@ public:
         
         ROS_WARN("Tracking time: %f ms", tracking_time.toc());
         tracker_map.setMap(track_clusters);
-        publishClusteredCloud(&pub_meas_cluster, &pub_meas_centroid, &pub_meas_cluster_info, meas_map, cloudHeader.stamp, odometryFrame);
         publishClusteredCloud(&pub_tracker_cluster, &pub_tracker_centroid, &pub_tracker_cluster_info, tracker_map, cloudHeader.stamp, odometryFrame);
     
         // 9. Removal
@@ -984,8 +991,6 @@ public:
         
         TicToc tic_toc;
 
-        std::vector<pcl::PointIndices> cluster_indices = meas_map.getClusterIndices();
-        std::map<int, int> id_to_idx = meas_map.getIdToIdxMap();
         if (tracking_debug)
             printf("--Removal--\n");
         // Set points in a measurement cluster to its corresponding tracker's mode probability
@@ -995,9 +1000,8 @@ public:
             if (tracking_debug)
                 printf("meas id: %d\n", (int)c.id);
             clustered_cloud += c.cloud.points.size();
-            size_t cluster_index = id_to_idx[c.id];
-            std::vector<int> indices = cluster_indices.at(cluster_index).indices; // indices of clustered points in the original pointcloud 
-            
+            size_t cluster_index = meas_map.id_to_idx[c.id];
+
             bool is_static = false;
 
             if (c.bbox.value >= 0) { // bounding-boxed
@@ -1035,14 +1039,22 @@ public:
             }
 
             if (is_static) {
-                for (auto &idx : indices) {
-                    downsampled->points[idx].intensity = 1.0;
+                if (clustering_method == "euclidean") {
+                    for (auto &idx : meas_map.cluster_indices.at(cluster_index).indices) {
+                        downsampled->points[idx].intensity = 1.0;
+                    }
+                } else {
+                    for (auto &pt : meas_map.graph_cluster_indices[cluster_index]) {
+                        downsampled->points[pt->idx].intensity = 1.0;
+                    }
                 }
             }
         }
+        
 
         // preserve points with static label (upsample)
         pcl::PointCloud<PointType>::Ptr static_cloud(new pcl::PointCloud<PointType>());
+        int non_cluster_cnt = 0;
         static_cloud->reserve(removed->points.size());
         for (size_t j = 0u; j < removed->points.size(); ++j) {
             PointType p = removed->points[j];
@@ -1051,12 +1063,19 @@ public:
                 if (voxel_index < 0) continue;
                 if (downsampled->points[voxel_index].intensity == 1.0)
                     static_cloud->points.push_back(p);
+                
+                if (tracking_debug) {
+                    if (downsampled->points[voxel_index].intensity == -1.0)
+                        non_cluster_cnt++;
+                }
             } else {
                 static_cloud->points.push_back(p);
             }
         }
-        if (tracking_debug)
+        if (tracking_debug) {
             printf("Downsampled: %d, Static: %d, Original: %d, After-removal: %d\n", (int)downsampled->points.size(), (int)clustered_cloud, (int)removed->points.size(), (int)static_cloud->points.size());
+            printf("Not clustered points: %d\n", non_cluster_cnt);
+        }
         *removed = *static_cloud;
         ROS_WARN("Dynamic removal: %f ms", tic_toc.toc());
     }

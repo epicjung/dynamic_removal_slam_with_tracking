@@ -15,12 +15,14 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <jsk_recognition_msgs/BoundingBox.h>
 #include <jsk_recognition_msgs/BoundingBoxArray.h>
+#include <forward_list>
 
 #include <opencv/cv.h>
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/search/impl/search.hpp>
+#include <pcl/search/kdtree.h>
 #include <pcl/range_image/range_image.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/common/common.h>
@@ -162,6 +164,7 @@ public:
     bool tracking_debug;
 
     // tracking
+    std::string clustering_method;
     float nongroundDownsample;
     float maxZ;
     float minZ;
@@ -308,7 +311,8 @@ public:
 
         nh.param<bool>("cluster_debug", cluster_debug, false);
         nh.param<bool>("tracking_debug", tracking_debug, false);
-
+        
+        nh.param<std::string>(  "tracking/clustering/method", clustering_method, "graph");
         nh.param<float>(  "tracking/clustering/nongroundDownsample", nongroundDownsample, 0.2);
         nh.param<float>(  "tracking/clustering/maxZ", maxZ, 10.0);
         nh.param<float>(  "tracking/clustering/minZ", minZ, 10.0);
