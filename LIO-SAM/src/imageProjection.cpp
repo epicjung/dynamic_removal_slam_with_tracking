@@ -1021,14 +1021,25 @@ public:
                 if (tracker.id >= 0) {
                     float speed = sqrt(tracker.vel_x * tracker.vel_x + tracker.vel_y * tracker.vel_y);
 
-                    if ( (tracker.mode == 0 && tracker.prob >= modeProbThres) || 
-                        (tracker.mode == 1 && tracker.prob < modeProbThres)) { // very static or not dynamic enough
-                        if (speed < velThres) {
-                            if (tracking_debug) {
-                                printf("Speed is small: %f\n", speed);
-                            }
-                            is_static = true;
+                    // option #1
+                    // if ( (tracker.mode == 0 && tracker.prob >= modeProbThres) || 
+                    //     (tracker.mode == 1 && tracker.prob < modeProbThres)) { // very static or not dynamic enough
+                    //     if (speed < velThres) {
+                    //         if (tracking_debug) {
+                    //             printf("Speed is small: %f\n", speed);
+                    //         }
+                    //         is_static = true;
+                    //     }
+                    // } else if (tracker.mode == -1) { // birth
+                    //     is_static = true;
+                    // }
+                    
+                    // option #2
+                    if (speed < velThres) {
+                        if (tracking_debug) {
+                            printf("Speed is small: %f\n", speed);
                         }
+                        is_static = true;
                     } else if (tracker.mode == -1) { // birth
                         is_static = true;
                     }
@@ -1085,24 +1096,22 @@ public:
         // preserve points with static label (upsample)
         pcl::PointCloud<PointType>::Ptr static_cloud(new pcl::PointCloud<PointType>());
         int non_cluster_cnt = 0;
+        int dyn_cluster_cnt = 0;
         static_cloud->reserve(removed->points.size());
         for (size_t j = 0u; j < removed->points.size(); ++j) {
             PointType p = removed->points[j];
             if (j < nonground_size) {
                 int voxel_index = filter.getCentroidIndex(p);
                 if (voxel_index < 0) continue;
-                if (tracking_debug) {
-                    printf("Before voxel: %f;%f;%f Inside voxel: %f;%f;%f int: %f\n", p.x, p.y, p.z, 
-                    downsampled->points[voxel_index].x, downsampled->points[voxel_index].y, 
-                    downsampled->points[voxel_index].z, downsampled->points[voxel_index].intensity);
-                }
+
                 if (downsampled->points[voxel_index].intensity == -100.0)
                     static_cloud->points.push_back(p);
                 
                 if (tracking_debug) {
                     if (downsampled->points[voxel_index].intensity == -1.0) {
-                        printf("not clustered...: %f;%f;%f\n", downsampled->points[voxel_index].x, downsampled->points[voxel_index].y, downsampled->points[voxel_index].z);
                         non_cluster_cnt++;
+                    } else if (downsampled->points[voxel_index].intensity >= 0) {
+                        dyn_cluster_cnt++;
                     }
                 }
             } else {
@@ -1110,8 +1119,8 @@ public:
             }
         }
         if (tracking_debug) {
-            printf("Downsampled: %d, clustered: %d, Original: %d, After-removal: %d\n", (int)downsampled->points.size(), (int)clustered_cloud_cnt, (int)removed->points.size(), (int)static_cloud->points.size());
-            printf("Not clustered points: %d\n", non_cluster_cnt);
+            printf("Downsampled: %d, clustered: %d,, Original: %d, After-removal: %d\n", (int)downsampled->points.size(), (int)clustered_cloud_cnt, (int)removed->points.size(), (int)static_cloud->points.size());
+            printf("Not clustered points: %d, dynamic points: %d\n", non_cluster_cnt, dyn_cluster_cnt);
         }
         *removed = *static_cloud;
         ROS_WARN("Dynamic removal: %f ms", tic_toc.toc());
