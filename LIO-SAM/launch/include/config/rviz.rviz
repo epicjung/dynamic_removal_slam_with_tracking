@@ -7,15 +7,16 @@ Panels:
         - /Global Options1
         - /links1
         - /links1/map1
+        - /links1/base_link1
+        - /links1/Odom1
         - /Point Cloud1
         - /Feature Cloud1
         - /Mapping1
         - /Tracking1
-        - /Tracking1/meas_cent1
         - /Tracking1/meas_cluster1
         - /Tracking1/track_cent1
+        - /Tracking1/BoundingBoxArray1
         - /Segmentation1
-        - /Segmentation1/labelled1
         - /Segmentation1/nonground_ds1
         - /evaluation1/Tracking1
         - /evaluation1/Tracking1/Estimated1
@@ -65,7 +66,7 @@ Visualization Manager:
           Length: 10
           Name: map
           Radius: 0.5
-          Reference Frame: carla_map
+          Reference Frame: liosam_map
           Value: false
         - Class: rviz/Axes
           Enabled: true
@@ -79,7 +80,7 @@ Visualization Manager:
           Length: 1
           Name: Odom
           Radius: 0.10000000149011612
-          Reference Frame: <Fixed Frame>
+          Reference Frame: odom
           Value: true
       Enabled: true
       Name: links
@@ -210,8 +211,8 @@ Visualization Manager:
         - Alpha: 1
           Autocompute Intensity Bounds: false
           Autocompute Value Bounds:
-            Max Value: 1.5514079332351685
-            Min Value: -1.769028663635254
+            Max Value: 1.341878890991211
+            Min Value: -2.1164684295654297
             Value: true
           Axis: Z
           Channel Name: intensity
@@ -219,7 +220,7 @@ Visualization Manager:
           Color: 255; 255; 255
           Color Transformer: AxisColor
           Decay Time: 1000
-          Enabled: false
+          Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Max Intensity: 128
@@ -236,7 +237,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: false
+          Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -447,7 +448,7 @@ Visualization Manager:
           Color: 252; 233; 79
           Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: false
+          Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -462,7 +463,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: false
+          Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -472,10 +473,10 @@ Visualization Manager:
           Axis: Z
           Channel Name: intensity
           Class: rviz/PointCloud2
-          Color: 0; 0; 255
-          Color Transformer: Intensity
+          Color: 255; 255; 255
+          Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: false
+          Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -490,15 +491,15 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: false
+          Value: true
         - Class: rviz/MarkerArray
-          Enabled: true
+          Enabled: false
           Marker Topic: /tracking/lidar/meas_cluster_info
           Name: meas_info
           Namespaces:
-            "": true
+            {}
           Queue Size: 100
-          Value: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -556,13 +557,13 @@ Visualization Manager:
           Use rainbow: true
           Value: false
         - Class: rviz/MarkerArray
-          Enabled: false
+          Enabled: true
           Marker Topic: /tracking/lidar/tracker_cluster_info
           Name: track_info
           Namespaces:
-            {}
+            "": true
           Queue Size: 100
-          Value: false
+          Value: true
         - Class: jsk_rviz_plugin/BoundingBoxArray
           Enabled: true
           Name: BoundingBoxArray
@@ -723,7 +724,7 @@ Visualization Manager:
           Color: 255; 0; 248
           Color Transformer: Intensity
           Decay Time: 0
-          Enabled: true
+          Enabled: false
           Invert Rainbow: false
           Max Color: 255; 25; 0
           Min Color: 25; 255; 0
@@ -738,7 +739,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: true
+          Value: false
         - Alpha: 1
           Class: jsk_rviz_plugin/PolygonArray
           Color: 25; 255; 0
@@ -910,7 +911,7 @@ Visualization Manager:
   Global Options:
     Background Color: 0; 0; 0
     Default Light: true
-    Fixed Frame: base_link
+    Fixed Frame: odom
     Frame Rate: 30
   Name: root
   Tools:
@@ -922,25 +923,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 28.90077781677246
+      Distance: 20.452762603759766
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 2.818857431411743
-        Y: -0.7668405771255493
-        Z: 1.9356240034103394
+        X: 8.962560653686523
+        Y: 22.4100284576416
+        Z: -6.444117546081543
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.1097971200942993
+      Pitch: 0.6653993129730225
       Target Frame: base_link
       Value: Orbit (rviz)
-      Yaw: 3.150394916534424
+      Yaw: 3.380404472351074
     Saved: ~
 Window Geometry:
   Displays:

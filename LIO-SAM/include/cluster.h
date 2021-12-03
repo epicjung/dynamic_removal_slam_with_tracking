@@ -1165,6 +1165,8 @@ public:
         
         graph_cluster_indices = clusters;
 
+        int non_cluster_cnt = 0;
+
         TicToc tic_toc;
         for (size_t i = 0u; i < clusters.size(); ++i) {
             int num_points = std::distance(clusters.at(i).begin(), clusters.at(i).end());
@@ -1181,8 +1183,16 @@ public:
                 cluster.calculateCentroid();
                 cluster.fitBoundingBox();
                 cluster_map_.push_back(cluster);
+            } else { // clustered but not enough points or too many points
+                non_cluster_cnt++;
+                for (auto &point_in_cluster : clusters.at(i)) {
+                    auto &pt = cloud_in->points[point_in_cluster->idx];
+                    pt.intensity = -1;
+                }
             }
-        }    
+        }
+        printf("Non cluster in building graph map: %d\n", non_cluster_cnt);
+        
         ROS_WARN("fit bounding box: %f ms", tic_toc.toc());
     }
     

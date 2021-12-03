@@ -90,7 +90,7 @@ lio_sam:
   globalMapVisualizationLeafSize: 1.0           # meters, global map visualization cloud density
 
 cluster_debug: false
-tracking_debug: false
+tracking_debug: true
 
 # ----------------------
 # TRACKING
@@ -145,7 +145,7 @@ tracking:
 # ----------------------
 removal:
   enableDynamicRemoval: true
-  velThres: 0.1
+  velThres: 0.05
   modeProbThres: 0.5
 
 # ----------------------

@@ -809,7 +809,7 @@ namespace gmphd
           [meas_id](const auto &element){return element.second == meas_id;});
         if (result == associated.end()) // not matched
         {
-          size_t gauss_idx = m_nPredTargets * k + birth_idx;
+          size_t gauss_idx = m_nPredTargets * (k+1) + birth_idx;
           // printf("Birth idx: %d, Gauss_idx: %d, exp size: %d\n", birth_idx, gauss_idx, m_expTargets->m_gaussians.size());
           GaussianModel<S> birth_gaussian = m_currTargets->m_gaussians[gauss_idx];
 

@@ -841,11 +841,11 @@ public:
 
         if (clustering_method == "graph") {
             TicToc graph_time;
-            graph_cluster->setInputCloudGraph(nonground_ds);
+            graph_cluster->setInputCloudGraph(nonground_local_ds);
             ROS_WARN("Graph cluster time: %f ms\n", graph_time.toc());
         }
          
-        publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, lidarFrame);
+        // publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, lidarFrame);
 
         // 4. Get initial pose
         double xCur, yCur, zCur, rollCur, pitchCur, yawCur;
@@ -855,9 +855,9 @@ public:
         tf::Matrix3x3 init_m(init_transform.getRotation());
         init_m.getRPY(rollCur, pitchCur, yawCur);
         Eigen::Affine3f pose = pcl::getTransformation(xCur, yCur, zCur, rollCur, pitchCur, yawCur);
-        pcl::transformPointCloud(*nonground_ds, *nonground_ds, pose);
+        pcl::transformPointCloud(*nonground_local_ds, *nonground_ds, pose);
 
-        // publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, odometryFrame);
+        publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, odometryFrame);
 
         // 5. Clustering and fitting box
         if (clustering_method == "euclidean")
@@ -994,12 +994,12 @@ public:
         if (tracking_debug)
             printf("--Removal--\n");
         // Set points in a measurement cluster to its corresponding tracker's mode probability
-        size_t clustered_cloud = 0;
+        size_t clustered_cloud_cnt = 0;
         for (const auto c : meas_clusters) {
             
             if (tracking_debug)
                 printf("meas id: %d\n", (int)c.id);
-            clustered_cloud += c.cloud.points.size();
+            clustered_cloud_cnt += c.cloud.points.size();
             size_t cluster_index = meas_map.id_to_idx[c.id];
 
             bool is_static = false;
@@ -1014,44 +1014,74 @@ public:
                     }
                 }
 
+                if (tracking_debug)
+                    printf("Meas: %d Tracker: %d Mode: %d prob: %f\n", c.id, tracker.id, tracker.mode, tracker.prob);
+                
                 // filter points by probability
                 if (tracker.id >= 0) {
                     float speed = sqrt(tracker.vel_x * tracker.vel_x + tracker.vel_y * tracker.vel_y);
-                    if (tracking_debug)
-                        printf("Meas: %d Tracker: %d Mode: %d prob: %f\n", c.id, tracker.id, tracker.mode, tracker.prob);
+
                     if ( (tracker.mode == 0 && tracker.prob >= modeProbThres) || 
                         (tracker.mode == 1 && tracker.prob < modeProbThres)) { // very static or not dynamic enough
                         if (speed < velThres) {
-                            if (tracking_debug)
-                                printf("Cluster is static\n");
+                            if (tracking_debug) {
+                                printf("Speed is small: %f\n", speed);
+                            }
                             is_static = true;
                         }
                     } else if (tracker.mode == -1) { // birth
                         is_static = true;
                     }
                 } else { // Not found in the tracker
-                    // printf("No tracker to the mesurement\n");
+                    if (tracking_debug)
+                        printf("No tracker to the mesurement\n");
                     is_static = true;
                 }
             } else {
-                // printf("Not bounding boxed measurement\n");
+                if (tracking_debug)
+                    printf("Not bounding boxed measurement\n");
                 is_static = true;
+            }
+
+            if (tracking_debug) {
+                if (is_static)
+                    printf("Cluster is static\n");
+                else 
+                    printf("Cluster is dynamic\n");
             }
 
             if (is_static) {
                 if (clustering_method == "euclidean") {
                     for (auto &idx : meas_map.cluster_indices.at(cluster_index).indices) {
-                        downsampled->points[idx].intensity = 1.0;
+                        downsampled->points[idx].intensity = -100.0; // static
                     }
                 } else {
                     for (auto &pt : meas_map.graph_cluster_indices[cluster_index]) {
-                        downsampled->points[pt->idx].intensity = 1.0;
+                        downsampled->points[pt->idx].intensity = -100.0; // static
+                    }
+                }
+            } else {
+                if (tracking_debug) {
+                    printf("Dynamic points: \n");
+                    if (clustering_method == "euclidean") {
+                        for (auto &idx : meas_map.cluster_indices.at(cluster_index).indices) {
+                            printf("%f;%f;%f %f\n", downsampled->points[idx].x,
+                            downsampled->points[idx].y,
+                            downsampled->points[idx].z,
+                            downsampled->points[idx].intensity);                         
+                        }
+                    } else {
+                        for (auto &pt : meas_map.graph_cluster_indices[cluster_index]) {
+                            printf("%f;%f;%f %f\n", downsampled->points[pt->idx].x,
+                            downsampled->points[pt->idx].y,
+                            downsampled->points[pt->idx].z,
+                            downsampled->points[pt->idx].intensity);                        
+                        }
                     }
                 }
             }
         }
         
-
         // preserve points with static label (upsample)
         pcl::PointCloud<PointType>::Ptr static_cloud(new pcl::PointCloud<PointType>());
         int non_cluster_cnt = 0;
@@ -1061,19 +1091,26 @@ public:
             if (j < nonground_size) {
                 int voxel_index = filter.getCentroidIndex(p);
                 if (voxel_index < 0) continue;
-                if (downsampled->points[voxel_index].intensity == 1.0)
+                if (tracking_debug) {
+                    printf("Before voxel: %f;%f;%f Inside voxel: %f;%f;%f int: %f\n", p.x, p.y, p.z, 
+                    downsampled->points[voxel_index].x, downsampled->points[voxel_index].y, 
+                    downsampled->points[voxel_index].z, downsampled->points[voxel_index].intensity);
+                }
+                if (downsampled->points[voxel_index].intensity == -100.0)
                     static_cloud->points.push_back(p);
                 
                 if (tracking_debug) {
-                    if (downsampled->points[voxel_index].intensity == -1.0)
+                    if (downsampled->points[voxel_index].intensity == -1.0) {
+                        printf("not clustered...: %f;%f;%f\n", downsampled->points[voxel_index].x, downsampled->points[voxel_index].y, downsampled->points[voxel_index].z);
                         non_cluster_cnt++;
+                    }
                 }
             } else {
-                static_cloud->points.push_back(p);
+                static_cloud->points.push_back(p); // add ground points
             }
         }
         if (tracking_debug) {
-            printf("Downsampled: %d, Static: %d, Original: %d, After-removal: %d\n", (int)downsampled->points.size(), (int)clustered_cloud, (int)removed->points.size(), (int)static_cloud->points.size());
+            printf("Downsampled: %d, clustered: %d, Original: %d, After-removal: %d\n", (int)downsampled->points.size(), (int)clustered_cloud_cnt, (int)removed->points.size(), (int)static_cloud->points.size());
             printf("Not clustered points: %d\n", non_cluster_cnt);
         }
         *removed = *static_cloud;
@@ -1082,6 +1119,9 @@ public:
 
     void publishClusteredCloud(ros::Publisher *thisPubCloud, ros::Publisher *thisPubCentroid, ros::Publisher *thisPubInfo, ClusterMap map, ros::Time thisStamp, string thisFrame)
     {
+        if (thisPubCloud->getNumSubscribers() == 0 && thisPubCentroid->getNumSubscribers() == 0 && thisPubInfo->getNumSubscribers() == 0)
+            return;
+
         pcl::PointCloud<PointType>::Ptr outPcl (new pcl::PointCloud<PointType>);
         pcl::PointCloud<PointType>::Ptr centroids (new pcl::PointCloud<PointType>);
         sensor_msgs::PointCloud2 segmentedCloud;
@@ -1089,6 +1129,8 @@ public:
 
         visualization_msgs::MarkerArray ids;
         std::vector<Cluster> cluster_map = map.getMap();
+
+        double speed;
 
         for (int i = 0; i < (int) cluster_map.size(); ++i)
         {
@@ -1135,14 +1177,18 @@ public:
                 id.pose.position.z = centroid.z;
                 id.pose.orientation.w = 1.0;
 
-                if (cluster.mode == 0){
-                    id.color.r = 1.0;
-                    id.color.g = 0.0;
-                    id.color.b = 0.0;
-                } else if (cluster.mode == 1){
-                    id.color.r = 0.0;
-                    id.color.g = 0.0;
-                    id.color.b = 1.0;
+                speed = sqrt(cluster.vel_x * cluster.vel_x + cluster.vel_y * cluster.vel_y);
+
+                if (cluster.mode == 0){ // static
+                    if (speed >= velThres) 
+                        id.color.g = 1.0;
+                    else 
+                        id.color.r = 1.0;
+                } else if (cluster.mode == 1){ // dynamic
+                    if (speed < velThres)
+                        id.color.g = 1.0;
+                    else
+                        id.color.b = 1.0;
                 } else {
                     id.color.a = 0.0;
                 }
@@ -1176,6 +1222,7 @@ public:
                 text.pose.orientation.w = 1.0;
                 ids.markers.push_back(text);
             }
+
             else if (map.getType() == MEASUREMENT)
             {
                 std::ostringstream stream;
