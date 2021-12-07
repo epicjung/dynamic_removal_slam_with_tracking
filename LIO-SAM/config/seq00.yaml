@@ -90,7 +90,7 @@ lio_sam:
   globalMapVisualizationLeafSize: 1.0           # meters, global map visualization cloud density
 
 cluster_debug: false
-tracking_debug: false
+tracking_debug: true
 
 # ----------------------
 # TRACKING
@@ -120,8 +120,8 @@ tracking:
     weightBirth: 0.2
     samplingPeriod: 0.1
     processNoise: 1e-12
-    spawnPoseNoise: 90 # opt: 90
-    spawnVelNoise: 20 # opt: 20
+    spawnPoseNoise: 110 # opt: 110
+    spawnVelNoise: 50 # opt: 50
     detectionProb: 1.0
     measPoseNoise: 1.0
     measSpeedNoise: 4.0
