@@ -814,7 +814,7 @@ namespace gmphd
           GaussianModel<S> birth_gaussian = m_currTargets->m_gaussians[gauss_idx];
 
           birth_gaussian.m_track_id = m_ntrack++;
-          birth_gaussian.m_weight = birth_gaussian.m_weight < 0.2f ? 0.2f: birth_gaussian.m_weight;
+          birth_gaussian.m_weight = birth_gaussian.m_weight < 0.2f ? 0.2f: 0.95 * birth_gaussian.m_weight;
           assert(birth_gaussian.model_type == -1);
           assert(birth_gaussian.c != 0.0);
           assert(birth_gaussian.m_track_id >= 0);

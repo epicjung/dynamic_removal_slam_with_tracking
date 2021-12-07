@@ -1,8 +1,8 @@
 lio_sam:
 
   # Topics
-  pointCloudTopic: "/carla/ego_vehicle/semantic_lidar"               # Point cloud data
-  imuTopic: "/carla/ego_vehicle/imu"                         # IMU data
+  pointCloudTopic: "/points_raw"               # Point cloud data
+  imuTopic: "/imu_correct"                         # IMU data
 
   odomTopic: "/odometry/imu"                   # IMU pre-preintegration odometry, same frequency as IMU
 
@@ -25,15 +25,23 @@ lio_sam:
   savePCDDirectory: "/LOAM/"        # in your home folder, starts and ends with "/". Warning: the code deletes "LOAM" folder then recreates it. See "mapOptimization" for implementation
 
   # Sensor Settings
-  sensor: carla                            # lidar sensor type, either 'velodyne' or 'ouster' or 'carla'
+  sensor: velodyne                            # lidar sensor type, either 'velodyne' or 'ouster' or 'carla'
   N_SCAN: 64                                  # number of lidar channel (i.e., 16, 32, 64, 128)
   Horizon_SCAN: 1800                          # lidar horizontal resolution (Velodyne:1800, Ouster:512,1024,2048)
   downsampleRate: 2                           # default: 1. Downsample your data if too many points. i.e., 16 = 64 / 4, 16 = 16 / 1
   lidarMinRange: 0.1                          # default: 1.0, minimum lidar range to be used
   lidarMaxRange: 50.0                       # default: 1000.0, maximum lidar range to be used
-  minAngle: -26.8
+  lidarMinZ: -1.9
+  minAngle: -24.8
   maxAngle: 2.0
   
+  
+  # Vehicle Settings
+  egoWidth: 1.6
+  egoLength: 4.0
+  lidarOffsetLength: -0.27 # in x-axis usually
+  lidarOffsetWidth: 0.0 # in y-axis usually
+
   # IMU Settings
   imuAccNoise: 3.9939570888238808e-03
   imuGyrNoise: 1.5636343949698187e-03
@@ -43,8 +51,8 @@ lio_sam:
   imuRPYWeight: 0.01
 
   # Extrinsics (lidar -> IMU)
-  extrinsicTrans: [-0.3, 0.0, -0.3]
-  extrinsicRot: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+  extrinsicTrans: [-8.086759e-01, 3.195559e-01, -7.997231e-01]
+  extrinsicRot: [9.999976e-01, 7.553071e-04, -2.035826e-03, -7.854027e-04, 9.998898e-01, -1.482298e-02, 2.024406e-03, 1.482454e-02, 9.998881e-01]
   extrinsicRPY: [1, 0, 0, 0, 1, 0, 0, 0, 1]
 
   # Extrinsics (IMU -> GPS)
@@ -90,22 +98,23 @@ lio_sam:
   globalMapVisualizationLeafSize: 1.0           # meters, global map visualization cloud density
 
 cluster_debug: false
-tracking_debug: true
+tracking_debug: false
 
 # ----------------------
 # TRACKING
 # ----------------------
 tracking:
+  enableTracking: true
   clustering: 
-    method: "graph" # 'euclidean' or 'graph'
+    method: "euclidean" # 'euclidean' or 'graph'
     nongroundDownSample: 0.05 # opt: 0.05
     maxZ: 3.0
     minZ: -10.0
     maxR: 100.0
-    clusteringTolerance: 1.0 # opt 0.5
-    minClusterSize: 5 # opt 4
+    clusteringTolerance: 0.5 # opt 0.5
+    minClusterSize: 10 # opt 4
     maxClusterSize: 5000 # opt 5000
-    graphDistThres: 0.3 # horizontal (opt 0.7)
+    graphDistThres: 0.3 # horizontal
     graphMergeThres: 1.2 # vertical
     graphLookupSize: 6
     graphAngleThres: 20.0
@@ -120,8 +129,8 @@ tracking:
     weightBirth: 0.2
     samplingPeriod: 0.1
     processNoise: 1e-12
-    spawnPoseNoise: 80 # opt: 90
-    spawnVelNoise: 10 # opt: 20
+    spawnPoseNoise: 110 # opt: 90
+    spawnVelNoise: 50 # opt: 20
     detectionProb: 1.0
     measPoseNoise: 1.0
     measSpeedNoise: 4.0
@@ -133,10 +142,10 @@ tracking:
 
   # L-Shape fitting
   lshape:
-    minHeight: 0.3 # opt: 0.5
+    minHeight: 0.5 # opt: 0.5
     maxHeight: 3.0
     maxArea: 30.0 
-    maxRatio: 9.0
+    maxRatio: 9.0 # opt: 9.0
     minDensity: 3.0
     maxDensity: 1500
 
@@ -144,7 +153,7 @@ tracking:
 # REMOVAL
 # ----------------------
 removal:
-  enableDynamicRemoval: true
+  enableDynamicRemoval: false
   velThres: 0.05
   modeProbThres: 0.5
 
@@ -228,4 +237,4 @@ ekf_gps:
                                0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,    0,    0,      0.015]
 
 rosbag:
-  type: "carla"
+  type: "kitti" # 'carla', 'kitti', 'no_ring', 'normal'
