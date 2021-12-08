@@ -106,7 +106,7 @@ tracking_debug: false
 tracking:
   enableTracking: true
   clustering: 
-    method: "euclidean" # 'euclidean' or 'graph'
+    method: "graph" # 'euclidean' or 'graph'
     nongroundDownSample: 0.05 # opt: 0.05
     maxZ: 3.0
     minZ: -10.0
@@ -114,7 +114,7 @@ tracking:
     clusteringTolerance: 0.5 # opt 0.5
     minClusterSize: 10 # opt 4
     maxClusterSize: 5000 # opt 5000
-    graphDistThres: 0.3 # horizontal
+    graphDistThres: 0.1 # horizontal
     graphMergeThres: 1.2 # vertical
     graphLookupSize: 6
     graphAngleThres: 20.0
@@ -129,8 +129,8 @@ tracking:
     weightBirth: 0.2
     samplingPeriod: 0.1
     processNoise: 1e-12
-    spawnPoseNoise: 110 # opt: 90
-    spawnVelNoise: 50 # opt: 20
+    spawnPoseNoise: 100 # opt: 100
+    spawnVelNoise: 60 # opt: 50
     detectionProb: 1.0
     measPoseNoise: 1.0
     measSpeedNoise: 4.0
@@ -163,8 +163,9 @@ removal:
 experiment:
   slam_save_dir: "/home/euigon/experiment/traj_result_dynamic/"
   trk_save_dir: "/home/euigon/experiment/trk_result/"
-  eval_tracking: true
+  eval_tracking: false
   eval_slam: false
+  eval_clustering: true
   max_out_cnt: 20
   lidar_scope: 40.0
   min_pt_cnt: 30

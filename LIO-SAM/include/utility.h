@@ -107,6 +107,12 @@ public:
     float minVertAngle;
     float maxVertAngle;
 
+    // Vehicle settings
+    float egoWidth;
+    float egoLength;
+    float lidarOffsetLength;
+    float lidarOffsetWidth;
+
     // IMU
     float imuAccNoise;
     float imuGyrNoise;
@@ -162,8 +168,10 @@ public:
 
     bool cluster_debug;
     bool tracking_debug;
+    bool cluster_save;
 
     // tracking
+    bool enableTracking;
     std::string clustering_method;
     float nongroundDownsample;
     float maxZ;
@@ -211,7 +219,8 @@ public:
     float maxDensity;
 
     std::string dataType;
-
+    std::string cls_save_dir;
+    bool eval_clustering;
     ParamServer()
     {
         nh.param<std::string>("/robot_id", robot_id, "roboat");
@@ -263,6 +272,11 @@ public:
         nh.param<float>("lio_sam/minVertAngle", minVertAngle, -26.8);
         nh.param<float>("lio_sam/maxVertAngle", maxVertAngle, 2.0);
 
+        nh.param<float>("lio_sam/egoWidth", egoWidth, 2.0);
+        nh.param<float>("lio_sam/egoLength", egoLength, 2.0);
+        nh.param<float>("lio_sam/lidarOffsetLength", lidarOffsetLength, 2.0);
+        nh.param<float>("lio_sam/lidarOffsetWidth", lidarOffsetWidth, 2.0);
+
         nh.param<float>("lio_sam/imuAccNoise", imuAccNoise, 0.01);
         nh.param<float>("lio_sam/imuGyrNoise", imuGyrNoise, 0.001);
         nh.param<float>("lio_sam/imuAccBiasN", imuAccBiasN, 0.0002);
@@ -312,6 +326,7 @@ public:
         nh.param<bool>("cluster_debug", cluster_debug, false);
         nh.param<bool>("tracking_debug", tracking_debug, false);
         
+        nh.param<bool>("tracking/enableTracking", enableTracking, true);
         nh.param<std::string>(  "tracking/clustering/method", clustering_method, "graph");
         nh.param<float>(  "tracking/clustering/nongroundDownsample", nongroundDownsample, 0.2);
         nh.param<float>(  "tracking/clustering/maxZ", maxZ, 10.0);
@@ -355,6 +370,9 @@ public:
         nh.param<bool>("removal/enableDynamicRemoval", enableDynamicRemoval, false);
         nh.param<float>("removal/velTrhes", velThres, 0.3);
         nh.param<float>("removal/modeProbThres", modeProbThres, 0.7);
+
+        nh.param<string>("experiment/cluster_save_dir", cls_save_dir, "");
+        nh.param<bool>("experiment/eval_clustering", eval_clustering, false);
 
         nh.param<std::string>("rosbag/type", dataType, "normal");
 

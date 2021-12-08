@@ -179,12 +179,10 @@ class GraphCluster : public ParamServer
                 continue;
 
             int row_idx = getRowIndex(point.x, point.y, point.z);
-            
             if (row_idx < 0 || row_idx >= N_SCAN)
                 continue;
 
             int col_idx = getColIndex(point.x, point.y);
-
             if (col_idx < 0 || col_idx >= Horizon_SCAN)
                 continue;
 
@@ -195,7 +193,8 @@ class GraphCluster : public ParamServer
             range_mat[row_idx][col_idx] = point;
             valid_idx_[row_idx].push_back(col_idx);
         }
-        ROS_WARN("Organize: %f ms", organize_time.toc());
+        if (!eval_clustering)
+            ROS_WARN("Organize: %f ms", organize_time.toc());
 
         TicToc process_time;
         // main processing
@@ -203,14 +202,19 @@ class GraphCluster : public ParamServer
 
             TicToc each_run_time;
             find_runs_slr(i);
-            ROS_WARN("find run: %f ms", each_run_time.toc());
+
+            if (cluster_debug)
+                ROS_WARN("find run: %f ms", each_run_time.toc());
 
             TicToc update_run_time;
             update_labels_slr(i);
-            ROS_WARN("update run: %f ms", update_run_time.toc());
+            
+            if (cluster_debug)
+                ROS_WARN("update run: %f ms", update_run_time.toc());
 
         }
-        ROS_WARN("Graph-based clustering: %f ms", process_time.toc());
+        if (!eval_clustering)
+            ROS_WARN("Graph-based clustering: %f ms", process_time.toc());
 
         TicToc conversion_time;
         // convert runs to indices
@@ -229,9 +233,10 @@ class GraphCluster : public ParamServer
             if (std::distance(runs[i].begin(), runs[i].end()) > 0)
                 cnt++;
         }
-
-        ROS_WARN("# of cluster: %d", cnt);
-        ROS_WARN("Conversion time: %f ms", conversion_time.toc());
+        if (!eval_clustering) {
+            ROS_WARN("# of cluster: %d", cnt);
+            ROS_WARN("Conversion time: %f ms", conversion_time.toc());
+        }
     }
 
     float calcDistance(Point pt1, Point pt2) {
@@ -253,18 +258,18 @@ class GraphCluster : public ParamServer
 
     void setInputCloudGraph(pcl::PointCloud<PointType>::Ptr cloud_in) {
 
+        TicToc reset_time;
         max_label_ = 1;
         runs.clear();
         runs.push_back(dummy_); // dummy for index `0`
         runs.push_back(dummy_);
 
-        for (int i = 0; i < N_SCAN; i++) {
-            valid_idx_[i].clear();
-        }
-
         std::for_each(range_mat.begin(), range_mat.end(), [](vector<Point>& inner_vec) {
             std::fill(inner_vec.begin(), inner_vec.end(), Point());
         });
+
+        if (!eval_clustering)
+            ROS_WARN("Reset time: %f ms", reset_time.toc());
 
 
         TicToc organize_time;
@@ -284,6 +289,7 @@ class GraphCluster : public ParamServer
                 continue;
             }
 
+            TicToc row_time;
             int row_idx = getRowIndex(point.x, point.y, point.z);
             
             if (row_idx < 0 || row_idx >= N_SCAN) {
@@ -291,8 +297,9 @@ class GraphCluster : public ParamServer
                 continue;
             }
 
+            TicToc col_time;
             int col_idx = getColIndex(point.x, point.y);
-
+            
             if (col_idx < 0 || col_idx >= Horizon_SCAN){
                 pt.intensity = -1;
                 continue;
@@ -304,9 +311,10 @@ class GraphCluster : public ParamServer
             }
             range_mat[row_idx][col_idx] = point;
             valid_cnt_[row_idx]++;
-            // sort(valid_idx_[row_idx].begin(), valid_idx_[row_idx].end());
         }
-        ROS_WARN("Organize: %f ms", organize_time.toc());
+
+        if (!eval_clustering)
+            ROS_WARN("Organize: %f ms", organize_time.toc());
 
         TicToc process_time;
         // main processing
@@ -346,7 +354,8 @@ class GraphCluster : public ParamServer
                 cin.get();
             }
         }
-        ROS_WARN("Process: %f ms", process_time.toc());
+        if (!eval_clustering)
+            ROS_WARN("Process: %f ms", process_time.toc());
 
         TicToc conversion_time;
         // convert runs to indices
@@ -365,9 +374,10 @@ class GraphCluster : public ParamServer
             if (std::distance(runs[i].begin(), runs[i].end()) > 0)
                 cnt++;
         }
-
-        ROS_WARN("# of cluster: %d", cnt);
-        ROS_WARN("Conversion time: %f ms", conversion_time.toc());
+        if (!eval_clustering) {
+            ROS_WARN("# of cluster: %d", cnt);
+            ROS_WARN("Conversion time: %f ms", conversion_time.toc());
+        }
     }
 
     void find_runs_slr(int scan_line) {
@@ -377,7 +387,6 @@ class GraphCluster : public ParamServer
 
         int first_valid_idx = valid_idx_[scan_line][0];
         int last_valid_idx = valid_idx_[scan_line][point_size - 1];
-        printf("scan line: %d\n", scan_line);
         for (int j = 0; j < point_size-1; j++) {
             
             int c_idx = valid_idx_[scan_line][j];
@@ -397,12 +406,10 @@ class GraphCluster : public ParamServer
             // compare with the next point
             auto &p_c = range_mat[scan_line][c_idx];
             auto &p_n = range_mat[scan_line][n_idx];
-            printf("p_c: %f;%f;%f p_n: %f;%f;%f\n", p_c.x, p_c.y, p_c.z, p_n.x, p_n.y, p_n.z);
             // Same run within same distance threshold
             // else make a new run
             if (calcDistance(p_c, p_n) < graphDistThres) {
                 p_n.label = p_c.label;
-                printf("merged\n");
             } else {
                 max_label_++;
                 p_n.label = max_label_;

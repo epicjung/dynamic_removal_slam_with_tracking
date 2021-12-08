@@ -26,11 +26,16 @@
 #include <signal.h>
 #include <map>
 #include <set>
+#include <numeric>
+#include <vector>
 
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
-
+// #include <pcl/kdtree/kdtree_flann.h>
+// #ifdef PCL_NO_PRECOMPILE
+#include <pcl/kdtree/impl/kdtree_flann.hpp>
+// #endif
 #include "iou.h"
 
 using namespace std;
@@ -88,6 +93,8 @@ class Track
 class Statistics
 {
     public: 
+
+        // Tracking
         std::vector<int> FN;
         std::vector<int> FP;
         std::vector<int> SWC;
@@ -101,7 +108,14 @@ class Statistics
         int MT = 0; // mostly tracked
         int PT = 0; // partially tracked
         int ML = 0; // mostly lost
+        
+        // Clustering
+        std::vector<float> GTR_entropies;
+        std::vector<float> PR_entropies;
+    
         Statistics() {}
+
+
 };
 
 class Experiment
@@ -114,9 +128,12 @@ class Experiment
         // params
         string slam_save_dir;
         string trk_save_dir;
+        string cls_save_dir;
+        string cluster_method;
         string odom_topic;
         bool eval_slam;
         bool eval_tracking;
+        bool eval_clustering;
 
         // string SAVE_DIR = "/home/euigon/experiment/traj_result/";
         string gt_file = "stamped_groundtruth.txt";
@@ -144,6 +161,9 @@ class Experiment
         // Raw
         ros::Subscriber sub_raw_cloud;
 
+        // tracking
+        ros::Subscriber sub_labeled_cloud;
+
         // queues
         deque<geometry_msgs::TransformStamped> gt_odom_queue;
         deque<nav_msgs::Odometry> est_odom_queue;
@@ -162,6 +182,10 @@ class Experiment
 
         Statistics stat;
 
+        // clustering
+        pcl::KdTreeFLANN<PointCarla>::Ptr kdtree;
+
+
     Experiment() {
 
         ros::NodeHandle nh("~");
@@ -170,8 +194,11 @@ class Experiment
 
         nh.param<string>("experiment/slam_save_dir", slam_save_dir, "/home/euigon/experiment/traj_result/");
         nh.param<string>("experiment/trk_save_dir", trk_save_dir, "/home/euigon/experiment/trk_result/");
+        nh.param<string>("experiment/cluster_save_dir", cls_save_dir, "");
+        nh.param<string>("tracking/clustering/method", cluster_method, "");
         nh.param<string>("lio_sam/odomTopic", odom_topic, "odometry");
         nh.param<bool>("experiment/eval_tracking", eval_tracking, false);
+        nh.param<bool>("experiment/eval_clustering", eval_clustering, false);
         nh.param<bool>("experiment/eval_slam", eval_slam, false);
         nh.param<float>("experiment/lidar_scope", lidar_scope, 40.0);
         nh.param<int>("experiment/max_out_cnt", max_out_cnt, 10);
@@ -197,6 +224,9 @@ class Experiment
         sub_raw_cloud = nh.subscribe<sensor_msgs::PointCloud2>("/carla/ego_vehicle/semantic_lidar/", 2000, &Experiment::cloudCallback, this, ros::TransportHints().tcpNoDelay());
         sub_tf = nh.subscribe<tf2_msgs::TFMessage>("/tf", 2000, &Experiment::tfCallback, this, ros::TransportHints().tcpNoDelay());
         
+        // clustering
+        sub_labeled_cloud = nh.subscribe<sensor_msgs::PointCloud2>("/tracking/lidar/meas_cluster_local", 2000, &Experiment::labeledCloudCallback, this, ros::TransportHints().tcpNoDelay());
+
         if (eval_slam) {
             ofstream gt_output(slam_save_dir + gt_file);
             ofstream est_output(slam_save_dir + est_file);
@@ -208,6 +238,14 @@ class Experiment
             ofstream trk_output(trk_save_dir + "result.txt");
             trk_output.close();
         }
+
+        if (eval_clustering) {
+            ofstream cls_output(cls_save_dir + cluster_method +"_entropy.csv");
+            cls_output.close();
+        }
+
+        // allocate memory
+        kdtree.reset(new pcl::KdTreeFLANN<PointCarla>());
     }
 
     ~Experiment() {
@@ -286,7 +324,177 @@ class Experiment
             exit(1);
         }
 
+        if (eval_clustering) {
+            ofstream cls_output(cls_save_dir + cluster_method +"_entropy.csv");
+            assert(stat.GTR_entropies.size() == stat.PR_entropies.size());
+            float count = static_cast<float>(stat.GTR_entropies.size());
+            for (size_t i = 0; i < stat.GTR_entropies.size(); i++) {
+                cls_output << i << "," << stat.GTR_entropies[i] <<","<<stat.PR_entropies[i] << std::endl;
+            }
+            cls_output << "avg" << "," << std::accumulate(stat.GTR_entropies.begin(), stat.GTR_entropies.end(), 0.0) / count << "," <<
+            std::accumulate(stat.PR_entropies.begin(), stat.PR_entropies.end(), 0.0) / count << std::endl;
+            cls_output.close();        
+        }
+
     }
+    void labeledCloudCallback(const sensor_msgs::PointCloud2::ConstPtr &msg_in) {
+        if (!eval_clustering)
+            return;
+
+        if (gt_odom_queue.empty() || gt_bbox_queue.empty() || cloud_queue.empty()) 
+            return;
+
+        // look for the gt odom for clustering
+        while (gt_odom_queue.front().header.stamp < msg_in->header.stamp){
+            gt_odom_queue.pop_front();                
+        }
+        if (gt_odom_queue.empty())
+            return;
+        
+        // look for the gt bbox for clustering
+        while (gt_bbox_queue.front().header.stamp < msg_in->header.stamp){
+            gt_bbox_queue.pop_front();                
+        }
+        if (gt_bbox_queue.empty())
+            return;
+
+        // look for the cloud for clustering
+        while (cloud_queue.front().header.stamp < msg_in->header.stamp){
+            cloud_queue.pop_front();                
+        }
+        if (cloud_queue.empty())
+            return;
+
+
+        sensor_msgs::PointCloud2 current_cloud = *msg_in;
+        sensor_msgs::PointCloud2 gt_cloud = cloud_queue.front();
+        geometry_msgs::TransformStamped gt_odom = gt_odom_queue.front();
+        jsk_recognition_msgs::BoundingBoxArray gt_bbox = gt_bbox_queue.front();
+
+        assert(gt_odom.header.stamp.toSec() == current_cloud.header.stamp.toSec());
+        assert(gt_bbox.header.stamp.toSec() == current_cloud.header.stamp.toSec());
+        assert(gt_cloud.header.stamp.toSec() == current_cloud.header.stamp.toSec());
+
+        // transform gt_bbox to "old_lidar_link" reference
+        gt_bbox.header.frame_id = "old_lidar_link";
+        for (size_t i = 0; i < gt_bbox.boxes.size(); i++) {
+            gt_bbox.boxes[i].header.frame_id = "old_lidar_link";
+            tf::Transform t_map_bbox;
+            tf::Transform t_map_lidar;
+            tf::poseMsgToTF(gt_bbox.boxes[i].pose, t_map_bbox);
+            tf::transformMsgToTF(gt_odom.transform, t_map_lidar);
+            tf::Transform t_lidar_bbox = t_map_lidar.inverse() * t_map_bbox;
+            gt_bbox.boxes[i].pose.position.x = t_lidar_bbox.getOrigin().x();
+            gt_bbox.boxes[i].pose.position.y = t_lidar_bbox.getOrigin().y();
+            gt_bbox.boxes[i].pose.position.z = t_lidar_bbox.getOrigin().z();
+            gt_bbox.boxes[i].pose.orientation.x = t_lidar_bbox.getRotation().x();
+            gt_bbox.boxes[i].pose.orientation.y = t_lidar_bbox.getRotation().y();
+            gt_bbox.boxes[i].pose.orientation.z = t_lidar_bbox.getRotation().z();
+            gt_bbox.boxes[i].pose.orientation.w = t_lidar_bbox.getRotation().w();
+        }
+
+        // send "carla_map" to "old_lidar_link" transform
+        gt_odom.child_frame_id = "old_lidar_link";
+        static tf::TransformBroadcaster tf_broadcaster;
+        tf_broadcaster.sendTransform(gt_odom);
+         
+        // publish
+        current_cloud.header.frame_id = "old_lidar_link";
+
+        if (pub_trk_cloud.getNumSubscribers() != 0)
+            pub_trk_cloud.publish(current_cloud);
+        if (pub_gt_bbox.getNumSubscribers() != 0)
+            pub_gt_bbox.publish(gt_bbox);
+
+
+        /* ----------------------
+         * START EVALUATION (GTR)
+         * ---------------------- */
+        pcl::PointCloud<pcl::PointXYZI>::Ptr inside_points(new pcl::PointCloud<pcl::PointXYZI>());
+        map<int, int> it_to_cnt; 
+        float GTR_entropy = 0.0;
+        for (auto& bbox : gt_bbox.boxes) {
+            // get number of points inside bounding box
+            inside_points->points.clear();
+            it_to_cnt.clear();
+            insideBBOX(current_cloud, bbox, *inside_points);
+            int sum = 0;
+            if (inside_points->size() >= min_pt_cnt) {
+                // count labels inside the box
+                for (auto &pt : inside_points->points) {
+                    int label = (int)pt.intensity;
+                    if (it_to_cnt.find(label) == it_to_cnt.end()) {
+                        it_to_cnt[label] = 1;
+                    } else {
+                        it_to_cnt[label]++;
+                    }
+                }
+
+                // calculate entropy
+                float entropy = 0.0;
+                for (auto &element : it_to_cnt) {
+                    entropy -= 1.0 * element.second / inside_points->size() * log(1.0*element.second / inside_points->size());
+                } 
+                GTR_entropy += entropy;
+            }
+        }
+        printf("GTR: %f\n", GTR_entropy);
+        stat.GTR_entropies.push_back(GTR_entropy);
+
+        /* ----------------------
+        * START EVALUATION (PR)
+        * ---------------------- */
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZI>());
+        pcl::PointCloud<PointCarla>::Ptr gt_cloud_in(new pcl::PointCloud<PointCarla>());
+        pcl::moveFromROSMsg(current_cloud, *cloud_in);
+        pcl::moveFromROSMsg(gt_cloud, *gt_cloud_in);
+        map<int, std::vector<int>> id_to_labels;
+        float PR_entropy = 0.0;
+        // create kd tree
+        kdtree->setInputCloud(gt_cloud_in);
+
+        for (auto &pt : cloud_in->points) {
+            PointCarla search_pt;
+            search_pt.x = pt.x;
+            search_pt.y = pt.y;
+            search_pt.z = pt.z;
+            int id = (int)pt.intensity;
+
+            if (id_to_labels.find(id) == id_to_labels.end()) {
+                id_to_labels.emplace(id, std::vector<int>(24, 0));
+            } 
+
+            std::vector<int> point_indices;
+            std::vector<float> point_dists;
+            if (kdtree->nearestKSearch(search_pt, 1, point_indices, point_dists) > 0) {
+                if (point_dists[0] < 1.0) {
+                    uint32_t label = gt_cloud_in->points[point_indices[0]].ObjTag;
+                    id_to_labels[id][label]++;
+                    // printf("xyz: %f;%f;%f, id: %d, label: %d, cnt: %d\n", pt.x, pt.y, pt.z, id, label, id_to_labels[id][label]);
+                } else {
+                    printf("Too far\n");
+                }
+            }
+        }
+
+        for (const auto &element : id_to_labels) {
+            std::vector<int> labels = element.second;
+            float entropy = 0.0;
+            float total = std::accumulate(labels.begin(), labels.end(), 0) * 1.0;
+            if (total > 0) {
+                for (size_t j = 0; j < labels.size(); j++) {
+                    if (labels[j] > 0) {
+                        entropy -= labels[j] / total * log(labels[j] / total); 
+                        // printf("id: %d, label: %d, entropy: %f, total: %f\n", element.first, j, entropy, total);           
+                    }
+                }
+            }
+            PR_entropy += entropy;
+        }
+        printf("PR: %f\n", PR_entropy);
+        stat.PR_entropies.push_back(PR_entropy);
+    }
+
     void objectCallback(const derived_object_msgs::ObjectArray::ConstPtr &msg_in) {
         jsk_recognition_msgs::BoundingBoxArray bbox_array;
         bbox_array.header.stamp = msg_in->header.stamp;
@@ -495,7 +703,7 @@ class Experiment
             
             // get number of points inside bounding box
             pcl::PointCloud<PointCarla>::Ptr inside_points(new pcl::PointCloud<PointCarla>());
-            insideBBOX(current_cloud, gt, inside_points);
+            insideBBOX(current_cloud, gt, *inside_points);
 
             if (dist <= lidar_scope && dist >= 1.5 && inside_points->points.size() >= min_pt_cnt) { 
                 inside_scope_bbox.boxes.push_back(gt);
@@ -569,7 +777,7 @@ class Experiment
             int gnd_cnt = 0; // # of ground lidar points
             if (it == associated.end()) { // not associated
                 pcl::PointCloud<PointCarla>::Ptr points_inside(new pcl::PointCloud<PointCarla>());
-                insideBBOX(current_cloud, est, points_inside);
+                insideBBOX(current_cloud, est, *points_inside);
                 for (const auto pt : points_inside->points) {
                     if (pt.ObjTag == 6u || pt.ObjTag == 7u || pt.ObjTag == 8u || pt.ObjTag == 14u) 
                         gnd_cnt++;
@@ -599,9 +807,10 @@ class Experiment
             pub_cmp_bbox.publish(inside_scope_bbox);
     }
 
-    void insideBBOX(sensor_msgs::PointCloud2 this_cloud, jsk_recognition_msgs::BoundingBox this_bbox, pcl::PointCloud<PointCarla>::Ptr inside_points) {
+    template <typename PointT>
+    void insideBBOX(sensor_msgs::PointCloud2 this_cloud, jsk_recognition_msgs::BoundingBox this_bbox, typename pcl::PointCloud<PointT> &inside_points) {
         // 2. convert current semantic point cloud to pcl
-        pcl::PointCloud<PointCarla>::Ptr pcl_cloud(new pcl::PointCloud<PointCarla>());
+        typename pcl::PointCloud<PointT>::Ptr pcl_cloud(new pcl::PointCloud<PointT>());
         pcl::moveFromROSMsg(this_cloud, *pcl_cloud);
         tf::Quaternion quat;
         tf::quaternionMsgToTF(this_bbox.pose.orientation, quat);        
@@ -623,7 +832,7 @@ class Experiment
                 rot_x <= this_bbox.dimensions.x / 2.0 && 
                 rot_y >= -this_bbox.dimensions.y / 2.0 &&
                 rot_y <= this_bbox.dimensions.y / 2.0) {
-                inside_points->points.push_back(pt);
+                inside_points.points.push_back(pt);
             }
         }
         // cout << "Inside: " << endl;

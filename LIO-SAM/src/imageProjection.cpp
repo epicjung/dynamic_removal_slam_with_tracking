@@ -106,6 +106,7 @@ private:
     ClusterMap meas_map;
     ClusterMap tracker_map;
     ros::Publisher pub_meas_cluster;
+    ros::Publisher pub_meas_cluster_local;
     ros::Publisher pub_tracker_cluster;
     ros::Publisher pub_meas_centroid;
     ros::Publisher pub_tracker_centroid;
@@ -124,6 +125,10 @@ private:
     boost::shared_ptr<GraphCluster> graph_cluster;
     std::vector<float> sensor_angles;
 
+    // cluster experiments
+    std::vector<double> cls_times;
+    std::vector<int> cls_pnt_cnts;
+
 
 public:
     ImageProjection():
@@ -137,6 +142,7 @@ public:
         pubLaserCloudInfo = nh.advertise<lio_sam::cloud_info> ("lio_sam/deskew/cloud_info", 1);
 
         pub_meas_cluster         = nh.advertise<sensor_msgs::PointCloud2>("/tracking/lidar/meas_cluster", 1);
+        pub_meas_cluster_local   = nh.advertise<sensor_msgs::PointCloud2>("/tracking/lidar/meas_cluster_local", 1);
         pub_tracker_cluster         = nh.advertise<sensor_msgs::PointCloud2>("/tracking/lidar/track_cluster", 1);
         pub_meas_centroid        = nh.advertise<sensor_msgs::PointCloud2>("/tracking/lidar/meas_centroid", 1);
         pub_tracker_centroid        = nh.advertise<sensor_msgs::PointCloud2>("/tracking/lidar/tracker_centroid", 1);
@@ -157,6 +163,21 @@ public:
         resetParameters();
 
         pcl::console::setVerbosityLevel(pcl::console::L_ERROR);
+
+        if (eval_clustering) {
+            ofstream cls_output(cls_save_dir + clustering_method + "_result.csv");
+            cls_output.close();
+        }
+    }
+
+    ~ImageProjection() {
+        if (eval_clustering) {
+            std::ofstream cls_output(cls_save_dir + clustering_method +"_result.csv", std::ios::app);
+            for (size_t i = 0; i < cls_times.size(); i++) {
+                cls_output << cls_pnt_cnts[i] << "," << cls_times[i] << std::endl;
+            }
+            cls_output.close();
+        }
     }
 
     void allocateMemory()
@@ -213,8 +234,6 @@ public:
         meas_map.setFittingParameters(minHeight, maxHeight, maxArea, maxRatio, minDensity, maxDensity);
         tracker_map.init(TRACKER, maxR, maxZ, 0.0, 0, 0);
     }
-
-    ~ImageProjection(){}
 
     void imuHandler(const sensor_msgs::Imu::ConstPtr& imuMsg)
     {
@@ -300,7 +319,6 @@ public:
         if (sensor == SensorType::VELODYNE)
         {
             pcl::moveFromROSMsg(currentCloudMsg, *laserCloudIn);
-            pcl::moveFromROSMsg(currentCloudMsg, *laserCloudInRaw);
         }
         else if (sensor == SensorType::OUSTER)
         {
@@ -358,16 +376,51 @@ public:
         timeScanCur = cloudHeader.stamp.toSec();
         timeScanEnd = timeScanCur + laserCloudIn->points.back().time;
 
+        if (dataType == "kitti") {
+            PointType point_in;
+            for (pcl::PointCloud<PointXYZIRT>::iterator it = laserCloudIn->begin(); it != laserCloudIn->end(); it++) {
+                bool inside = (it->y >= -egoWidth/2.0 && it->y <= egoWidth/2.0) && (it->x <= egoLength / 2.0 - lidarOffsetLength && it->x >= -egoLength / 2.0 - lidarOffsetLength);
+                float range = sqrt(it->x*it->x + it->y*it->y + it->z*it->z);
+                if (!inside && range >= lidarMinRange && range <= lidarMaxRange) {
+                    if (it->ring % downsampleRate != 0)
+                        continue;
+                    if (it->z < -2.0)
+                        continue;
+                    point_in.x = it->x;
+                    point_in.y = it->y;
+                    point_in.z = it->z;
+                    point_in.intensity = it->intensity;
+                    laserCloudInRaw->points.push_back(point_in);
+                }
+            }
+            if (enableTracking)
+                tracking(laserCloudInRaw);
+            
+            if (enableDynamicRemoval) {
+                pcl::PointCloud<PointXYZIRT>::Ptr laserRingAdded(new pcl::PointCloud<PointXYZIRT>());
+                for (pcl::PointCloud<PointType>::iterator it = laserCloudInRaw->begin(); it != laserCloudInRaw->end(); it++)
+                {
+                    PointXYZIRT thisPoint;
+                    thisPoint.x = it->x;
+                    thisPoint.y = it->y;
+                    thisPoint.z = it->z; 
+                    thisPoint.ring = getRowIndex(thisPoint.x, thisPoint.y, thisPoint.z, sensor_angles);                    
+                    thisPoint.intensity = it->intensity;
+                    laserRingAdded->points.push_back(thisPoint);
+                }
+                *laserCloudIn = *laserRingAdded;
+                laserCloudIn->is_dense = true;
+                ROS_WARN("After removal size: %d\n", laserCloudIn->points.size());
+            }
+        }
+        
         if (dataType == "carla")
         {
-            // vehicle spec
-            float EGO_WIDTH = 2.17;
-            float EGO_LENGTH = 4.809;
 
             // remove NaN; remove inside vehicle; downsample
             pcl::PointCloud<PointType>::Ptr filtered(new pcl::PointCloud<PointType>());
             for (pcl::PointCloud<PointType>::iterator it = laserCloudInRaw->begin(); it != laserCloudInRaw->end(); it++) {
-                bool inside = (it->y >= -EGO_WIDTH/2.0 && it->y <= EGO_WIDTH/2.0) && (it->x <= EGO_LENGTH / 2.0 + 0.2 && it->x >= -EGO_LENGTH / 2.0 + 0.2);
+                bool inside = (it->y >= -egoWidth/2.0 && it->y <= egoWidth/2.0) && (it->x <= egoLength / 2.0 - lidarOffsetLength && it->x >= -egoLength / 2.0 - lidarOffsetLength);
                 size_t row_idx = getRowIndex(it->x, it->y, it->z, sensor_angles);
                 float range = sqrt(it->x*it->x + it->y*it->y + it->z*it->z);
                 if (!(isnan(it->x) || isnan(it->y) || isnan(it->z)) && !inside && range >= lidarMinRange && range <= lidarMaxRange) {
@@ -378,7 +431,7 @@ public:
             }
             *laserCloudInRaw = *filtered;
             ROS_WARN("Filtered size: %d\n", filtered->points.size());
-            if (enableDynamicRemoval)
+            if (enableTracking)
                 tracking(laserCloudInRaw); // dynamic removal
             
             // create ring info
@@ -760,6 +813,7 @@ public:
         deleter_marker.header.frame_id = this_frame;
         deleter_marker.header.stamp = this_stamp;
         deleter_marker.action = visualization_msgs::Marker::DELETEALL;
+        deleter_marker.pose.orientation.w = 1.0;
         deleter.markers.push_back(deleter_marker);
         pub_meas_cluster_info.publish(deleter);
         pub_tracker_cluster_info.publish(deleter);
@@ -839,12 +893,19 @@ public:
         // Fast clustering test
         vector<vector<int>> clusters;
 
+        TicToc graph_time;
         if (clustering_method == "graph") {
-            TicToc graph_time;
             graph_cluster->setInputCloudGraph(nonground_local_ds);
-            ROS_WARN("Graph cluster time: %f ms\n", graph_time.toc());
+            cls_times.push_back(graph_time.toc());
+            cls_pnt_cnts.push_back((int)nonground_local_ds->points.size());
+        } else if (clustering_method == "slr") {
+            graph_cluster->setInputCloudSLR(nonground_local_ds);
+            cls_times.push_back(graph_time.toc());
+            cls_pnt_cnts.push_back((int)nonground_local_ds->points.size());
         }
-         
+        
+        ROS_WARN("Graph cluster time: %f ms", graph_time.toc());
+
         // publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, lidarFrame);
 
         // 4. Get initial pose
@@ -860,11 +921,16 @@ public:
         publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, odometryFrame);
 
         // 5. Clustering and fitting box
-        if (clustering_method == "euclidean")
+        if (clustering_method == "euclidean") {
+            TicToc euc_time;
             meas_map.buildMap(nonground_ds, used_id_cnt);
-        else 
+            cls_times.push_back(euc_time.toc());
+            cls_pnt_cnts.push_back((int)nonground_ds->points.size());
+        }
+        else { 
             meas_map.buildGraphMap(graph_cluster->runs, nonground_ds, used_id_cnt);
-        
+        }
+        publishLabelCloud(&pub_meas_cluster_local, meas_map, pose, cloudHeader.stamp, lidarFrame);
         publishClusteredCloud(&pub_meas_cluster, &pub_meas_centroid, &pub_meas_cluster_info, meas_map, cloudHeader.stamp, odometryFrame);
         publishBoundingBox(&pub_bbox, meas_map, cloudHeader.stamp, odometryFrame);
         publishMARBoundingBox(&pub_MAR_bbox, meas_map, cloudHeader.stamp, odometryFrame);
@@ -971,7 +1037,8 @@ public:
     
         // 9. Removal
         std::map<int, int> tracker_to_meas = target_tracker.getAssociationMap();
-        dynamicRemoval(tracker_to_meas, meas_clusters, track_clusters_map, nonground_local_ds, ordered, downsize_filter, nonground_size);        
+        if (enableDynamicRemoval)
+            dynamicRemoval(tracker_to_meas, meas_clusters, track_clusters_map, nonground_local_ds, ordered, downsize_filter, nonground_size);        
         *cloud_in = *ordered;
         pcl::transformPointCloud(*ordered, *ordered, pose);
         publishCloud(&pub_static_scene, ordered, cloudHeader.stamp, odometryFrame);
@@ -1115,6 +1182,26 @@ public:
         }
         *removed = *static_cloud;
         ROS_WARN("Dynamic removal: %f ms", tic_toc.toc());
+    }
+
+    void publishLabelCloud(ros::Publisher *thisPubCloud, ClusterMap map, Eigen::Affine3f pose, ros::Time thisStamp, string thisFrame) {
+        if (thisPubCloud->getNumSubscribers() != 0) {
+            pcl::PointCloud<PointType>::Ptr outPcl (new pcl::PointCloud<PointType>);
+            sensor_msgs::PointCloud2 labeledCloud;
+            std::vector<Cluster> cluster_map = map.getMap();
+
+            for (size_t i = 0; i < (int)cluster_map.size(); ++i){
+                Cluster cluster = cluster_map[i];
+                *outPcl += cluster.cloud;
+            }
+
+            // transform to local coordinate
+            pcl::transformPointCloud(*outPcl, *outPcl, pose.inverse());
+            pcl::toROSMsg(*outPcl, labeledCloud);
+            labeledCloud.header.stamp = thisStamp;
+            labeledCloud.header.frame_id = thisFrame;
+            thisPubCloud->publish(labeledCloud);
+        }
     }
 
     void publishClusteredCloud(ros::Publisher *thisPubCloud, ros::Publisher *thisPubCentroid, ros::Publisher *thisPubInfo, ClusterMap map, ros::Time thisStamp, string thisFrame)

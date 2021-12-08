@@ -78,7 +78,9 @@
         "typeindex": "cpp",
         "typeinfo": "cpp",
         "codecvt": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "*.txx": "cpp",
+        "valarray": "cpp"
     },
     "python.analysis.extraPaths": [
         "/home/euigon/liosam_ws/devel/lib/python2.7/dist-packages",
