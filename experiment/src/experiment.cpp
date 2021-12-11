@@ -185,6 +185,9 @@ class Experiment
         // clustering
         pcl::KdTreeFLANN<PointCarla>::Ptr kdtree;
 
+        map<uint8_t, uint8_t> object_cnt;
+        int frame_cnt;
+
 
     Experiment() {
 
@@ -246,6 +249,7 @@ class Experiment
 
         // allocate memory
         kdtree.reset(new pcl::KdTreeFLANN<PointCarla>());
+        frame_cnt = 0;
     }
 
     ~Experiment() {
@@ -297,6 +301,7 @@ class Experiment
             trk_output << "CLEAR metric: " << std::endl;
             trk_output << stat.t_FN<<" "<<stat.t_FP<<" "<<stat.t_SWC<<" "<<stat.t_GT<<" "<< 1-(float)(stat.t_FP+stat.t_FN+stat.t_SWC)/stat.t_GT << std::endl;
             
+            cout << "Frames: " << frame_cnt << endl;
             cout << "Seen: " << endl;
             for (auto track : track_table) {
                 if (track.second.seen) {
@@ -499,8 +504,14 @@ class Experiment
         jsk_recognition_msgs::BoundingBoxArray bbox_array;
         bbox_array.header.stamp = msg_in->header.stamp;
         bbox_array.header.frame_id = "carla_map";
+        object_cnt.clear();
         for (size_t i = 0; i < msg_in->objects.size(); i++) {
             derived_object_msgs::Object obj = msg_in->objects[i];
+            if (object_cnt.find(obj.classification) == object_cnt.end()) {
+                object_cnt[obj.classification] = 1;
+            } else {
+                object_cnt[obj.classification]++;
+            }
             jsk_recognition_msgs::BoundingBox bbox;
             bbox.label = obj.id;
             bbox.value = (float) obj.classification * 1.0;
@@ -523,6 +534,11 @@ class Experiment
             bbox_array.boxes.push_back(bbox);
         }
         gt_bbox_queue.push_back(bbox_array);
+        // Statistics for object numbers
+        // printf("Object stat: \n");
+        // for (auto element : object_cnt) {
+        //     printf("ID: %d -- %d\n", element.first, element.second);
+        // }
     }
 
     void tfCallback(const tf2_msgs::TFMessageConstPtr &msg_in) {
@@ -656,7 +672,6 @@ class Experiment
         }
 
         // send "carla_map" to "old_lidar_link" transform
-        cout << "Found at: " << gt_odom.header.stamp.toSec() << endl;
         gt_odom.child_frame_id = "old_lidar_link";
         static tf::TransformBroadcaster tf_broadcaster;
         tf_broadcaster.sendTransform(gt_odom);
@@ -744,17 +759,17 @@ class Experiment
                     
                     if (cur_tracker->pred_label != candidates[max_idx].label) { // id switch
                         c_id_switch++;
-                        // if (cur_tracker->trk_cnt > cur_tracker->max_trk_cnt) { // update max tracking cnt
-                        //     cur_tracker->max_trk_cnt = cur_tracker->trk_cnt;
-                        // }
-                        cur_tracker->max_trk_cnt += cur_tracker->trk_cnt;
+                        if (cur_tracker->trk_cnt > cur_tracker->max_trk_cnt) { // update max tracking cnt (correct)
+                            cur_tracker->max_trk_cnt = cur_tracker->trk_cnt;
+                        }
+                        cur_tracker->max_trk_cnt += cur_tracker->trk_cnt; // wrong
                         cur_tracker->trk_cnt = 0;
                     } else {
                         cur_tracker->trk_cnt++;
-                        // if (cur_tracker->trk_cnt > cur_tracker->max_trk_cnt) { // update max tracking cnt
-                        //     cur_tracker->max_trk_cnt = cur_tracker->trk_cnt;
-                        // }
-                        cur_tracker->max_trk_cnt += cur_tracker->trk_cnt;
+                        if (cur_tracker->trk_cnt > cur_tracker->max_trk_cnt) { // update max tracking cnt (correct)
+                            cur_tracker->max_trk_cnt = cur_tracker->trk_cnt;
+                        }
+                        cur_tracker->max_trk_cnt += cur_tracker->trk_cnt; // wrong
                     }
                     cur_tracker->pred_label = candidates[max_idx].label;
                 } else { // no est_bbox associated
@@ -794,15 +809,17 @@ class Experiment
         stat.t_FRAG += c_fragmentation;
         stat.t_SWC += c_id_switch;
         stat.t_GT += c_gt_cnt;
-        stat.FN.push_back(c_false_neg);
-        stat.FP.push_back(c_false_pos);
-        stat.FRAG.push_back(c_fragmentation);
-        stat.SWC.push_back(c_id_switch);
-        stat.GT.push_back(c_gt_cnt);
-        stat.MOTA.push_back(1 - float(c_false_pos + c_false_neg + c_id_switch) / c_gt_cnt);
-        cout << "FN: " << c_false_neg << " FP: " << c_false_pos << " Frag: " << c_fragmentation << " Switch: " << c_id_switch << " gt: " << c_gt_cnt << endl;
-        cout << "MOTA: " << 1-(c_false_pos + c_false_neg + c_id_switch) / (float)c_gt_cnt << endl;
-    
+        frame_cnt++;
+        if (c_gt_cnt > 0) {
+            stat.FN.push_back(c_false_neg);
+            stat.FP.push_back(c_false_pos);
+            stat.FRAG.push_back(c_fragmentation);
+            stat.SWC.push_back(c_id_switch);
+            stat.GT.push_back(c_gt_cnt);
+            stat.MOTA.push_back(1 - float(c_false_pos + c_false_neg + c_id_switch) / c_gt_cnt);
+            cout << "FN: " << c_false_neg << " FP: " << c_false_pos << " Frag: " << c_fragmentation << " Switch: " << c_id_switch << " gt: " << c_gt_cnt << endl;
+            cout << "MOTA: " << 1-(c_false_pos + c_false_neg + c_id_switch) / (float)c_gt_cnt << endl;
+        }
         if (pub_cmp_bbox.getNumSubscribers() != 0)
             pub_cmp_bbox.publish(inside_scope_bbox);
     }
@@ -889,7 +906,6 @@ class Experiment
             return;
 
         geometry_msgs::TransformStamped gt_odom = gt_odom_queue.front();
-        cout << "Found at: " << gt_odom.header.stamp.toSec() << endl;
         assert(gt_odom.header.stamp.toSec() == cur_odom_lidar.header.stamp.toSec());
 
         tf::Transform t_map_lidar;

@@ -401,8 +401,8 @@ Visualization Manager:
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
-            Max Value: 1.7572399377822876
-            Min Value: -1.602110505104065
+            Max Value: 1.6290979385375977
+            Min Value: -1.7899426221847534
             Value: true
           Axis: Z
           Channel Name: intensity
@@ -410,7 +410,7 @@ Visualization Manager:
           Color: 255; 255; 255
           Color Transformer: AxisColor
           Decay Time: 0
-          Enabled: true
+          Enabled: false
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -425,13 +425,14 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: true
+          Value: false
         - Class: rviz/MarkerArray
           Enabled: true
           Marker Topic: /lio_sam/mapping/loop_closure_constraints
           Name: Loop constraint
           Namespaces:
-            {}
+            loop_edges: true
+            loop_nodes: true
           Queue Size: 100
           Value: true
       Enabled: true
@@ -563,15 +564,15 @@ Visualization Manager:
           Marker Topic: /tracking/lidar/tracker_cluster_info
           Name: track_info
           Namespaces:
-            "": true
+            {}
           Queue Size: 100
           Value: true
         - Class: jsk_rviz_plugin/BoundingBoxArray
-          Enabled: true
+          Enabled: false
           Name: BoundingBoxArray
           Topic: /tracking/lidar/bbox
           Unreliable: false
-          Value: true
+          Value: false
           alpha: 0.800000011920929
           color: 25; 255; 0
           coloring: Flat color
@@ -590,7 +591,7 @@ Visualization Manager:
           line width: 0.05000000074505806
           only edge: true
           show coords: false
-      Enabled: true
+      Enabled: false
       Name: Tracking
     - Class: rviz/Group
       Displays:
@@ -762,23 +763,23 @@ Visualization Manager:
         - Class: rviz/Group
           Displays:
             - Class: jsk_rviz_plugin/BoundingBoxArray
-              Enabled: false
+              Enabled: true
               Name: Estimated
               Topic: /exp/trk/est_bbox
               Unreliable: false
-              Value: false
+              Value: true
               alpha: 0.800000011920929
               color: 25; 255; 0
               coloring: Label
               line width: 0.10000000149011612
               only edge: false
-              show coords: true
+              show coords: false
             - Class: jsk_rviz_plugin/BoundingBoxArray
-              Enabled: false
+              Enabled: true
               Name: Ground-truth
               Topic: /exp/gt_bbox
               Unreliable: false
-              Value: false
+              Value: true
               alpha: 1
               color: 25; 255; 0
               coloring: Label
@@ -786,11 +787,11 @@ Visualization Manager:
               only edge: true
               show coords: false
             - Class: jsk_rviz_plugin/BoundingBoxArray
-              Enabled: false
+              Enabled: true
               Name: Compared
               Topic: /exp/cmp_bbox
               Unreliable: false
-              Value: false
+              Value: true
               alpha: 1
               color: 25; 255; 0
               coloring: Label
@@ -809,7 +810,7 @@ Visualization Manager:
               Color: 233; 185; 110
               Color Transformer: Intensity
               Decay Time: 0
-              Enabled: false
+              Enabled: true
               Invert Rainbow: false
               Max Color: 0; 0; 0
               Min Color: 255; 255; 255
@@ -824,7 +825,7 @@ Visualization Manager:
               Unreliable: false
               Use Fixed Frame: true
               Use rainbow: true
-              Value: false
+              Value: true
             - Class: rviz/MarkerArray
               Enabled: true
               Marker Topic: /exp/trk/point_id
@@ -949,25 +950,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 135.61727905273438
+      Distance: 69.184814453125
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -4.244458198547363
-        Y: 9.321942329406738
-        Z: -17.335237503051758
+        X: -92.66557312011719
+        Y: -69.95889282226562
+        Z: -3.487762451171875
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
-      Target Frame: base_link
+      Pitch: 0.8147964477539062
+      Target Frame: map
       Value: Orbit (rviz)
-      Yaw: 3.162226438522339
+      Yaw: 2.22222638130188
     Saved: ~
 Window Geometry:
   Displays:

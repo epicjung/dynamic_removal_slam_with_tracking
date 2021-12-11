@@ -6,6 +6,7 @@
     <!-- <rosparam file="$(find lio_sam)/config/params_lastmile.yaml" command="load" />
     <rosparam file="$(find lio_sam)/config/seg_params_lastmile.yaml" command="load"/> -->
     <rosparam file="$(find lio_sam)/config/seq00.yaml" command="load" />
+    <!-- <rosparam file="$(find lio_sam)/config/highway2.yaml" command="load" /> -->
     <!-- <rosparam file="$(find lio_sam)/config/kitti_seq0091.yaml" command="load" /> -->
     <rosparam file="$(find lio_sam)/config/seg_params_carla.yaml" command="load"/>
 

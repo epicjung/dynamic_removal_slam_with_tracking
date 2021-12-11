@@ -140,7 +140,7 @@ tracking:
 
   # L-Shape fitting
   lshape:
-    minHeight: 0.3 # opt: 0.5
+    minHeight: 0.0 # opt: 0.5
     maxHeight: 3.0
     maxArea: 30.0 
     maxRatio: 9.0
