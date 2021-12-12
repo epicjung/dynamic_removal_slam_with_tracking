@@ -57,6 +57,7 @@ private:
 
     std::mutex imuLock;
     std::mutex odoLock;
+    std::mutex lidarLock;
 
     ros::Subscriber subLaserCloud;
     ros::Publisher  pubLaserCloud;
@@ -129,6 +130,10 @@ private:
     std::vector<double> cls_times;
     std::vector<int> cls_pnt_cnts;
 
+    // tracking experiments
+    std::vector<int> trk_cnts;
+    std::vector<double> trk_times;
+    
 
 public:
     ImageProjection():
@@ -168,6 +173,11 @@ public:
             ofstream cls_output(cls_save_dir + clustering_method + "_result.csv");
             cls_output.close();
         }
+
+        if (eval_tracking) {
+            ofstream trk_output(trk_save_dir + "time.csv");
+            trk_output.close();
+        }
     }
 
     ~ImageProjection() {
@@ -177,6 +187,14 @@ public:
                 cls_output << cls_pnt_cnts[i] << "," << cls_times[i] << std::endl;
             }
             cls_output.close();
+        }
+
+        if (eval_tracking) {
+            std::ofstream trk_output(trk_save_dir + "time.csv", std::ios::app);
+            for (size_t i = 0; i < trk_times.size(); i++) {
+                trk_output << trk_cnts[i] << "," << trk_times[i] << std::endl;
+            }
+            trk_output.close();
         }
     }
 
@@ -308,14 +326,18 @@ public:
     bool cachePointCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
     {
         // cache point cloud
-    
+        lidarLock.lock();
         cloudQueue.push_back(*laserCloudMsg);
+        lidarLock.unlock();
         if (cloudQueue.size() <= 2)
             return false;
 
         // convert cloud
         currentCloudMsg = std::move(cloudQueue.front());
+        lidarLock.lock();
         cloudQueue.pop_front();
+        lidarLock.unlock();
+
         if (sensor == SensorType::VELODYNE)
         {
             pcl::moveFromROSMsg(currentCloudMsg, *laserCloudIn);
@@ -375,9 +397,8 @@ public:
         cloudHeader = currentCloudMsg.header;
         timeScanCur = cloudHeader.stamp.toSec();
         timeScanEnd = timeScanCur + laserCloudIn->points.back().time;
-
         if (dataType == "kitti") {
-            PointType point_in;
+            laserCloudInRaw->points.clear();
             for (pcl::PointCloud<PointXYZIRT>::iterator it = laserCloudIn->begin(); it != laserCloudIn->end(); it++) {
                 bool inside = (it->y >= -egoWidth/2.0 && it->y <= egoWidth/2.0) && (it->x <= egoLength / 2.0 - lidarOffsetLength && it->x >= -egoLength / 2.0 - lidarOffsetLength);
                 float range = sqrt(it->x*it->x + it->y*it->y + it->z*it->z);
@@ -386,6 +407,7 @@ public:
                         continue;
                     if (it->z < -2.0)
                         continue;
+                    PointType point_in;
                     point_in.x = it->x;
                     point_in.y = it->y;
                     point_in.z = it->z;
@@ -413,7 +435,7 @@ public:
                 ROS_WARN("After removal size: %d\n", laserCloudIn->points.size());
             }
         }
-        
+
         if (dataType == "carla")
         {
 
@@ -459,7 +481,7 @@ public:
         }
 
         // check ring channel
-        if (dataType == "normal")
+        if (dataType != "carla")
         {
             static int ringFlag = 0;
             if (ringFlag == 0)
@@ -827,6 +849,8 @@ public:
 
     void tracking(pcl::PointCloud<PointType>::Ptr cloud_in)
     {
+
+        double init_time = 0.0;
         static int lidar_count = -1;
         static int used_id_cnt = 0;
         if (++lidar_count % (0+1) != 0)
@@ -868,15 +892,6 @@ public:
         }
 
         TicToc voxel_time;
-        // // 3. Voxel and filter
-        // pcl::PointCloud<PointType>::Ptr cloud_filtered(new pcl::PointCloud<PointType>());
-        // static pcl::PassThrough<PointType> pass;
-        // pass.setInputCloud(nonground);
-        // pass.setFilterFieldName("z");
-        // pass.setFilterLimits(minZ, maxZ);
-        // pass.filter(*cloud_filtered);
-        // printf("After z filter: %d\n", (int)cloud_filtered->points.size());
-        // *nonground = *cloud_filtered;
 
         pcl::PointCloud<PointType>::Ptr nonground_ds(new pcl::PointCloud<PointType>());
         pcl::PointCloud<PointType>::Ptr nonground_local_ds(new pcl::PointCloud<PointType>());
@@ -889,6 +904,8 @@ public:
         ROS_WARN("Voxelize: %f ms", voxel_time.toc());
         ROS_WARN("After voxelized (%f m): %d", nongroundDownsample, (int)nonground_ds->points.size());
         *nonground_local_ds = *nonground_ds;
+
+        init_time += voxel_time.toc();
 
         // Fast clustering test
         vector<vector<int>> clusters;
@@ -903,10 +920,10 @@ public:
             cls_times.push_back(graph_time.toc());
             cls_pnt_cnts.push_back((int)nonground_local_ds->points.size());
         }
-        
+        init_time += graph_time.toc();
         ROS_WARN("Graph cluster time: %f ms", graph_time.toc());
 
-        // publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, lidarFrame);
+        publishCloud(&pub_nonground_ds_cloud, nonground_ds, cloudHeader.stamp, lidarFrame);
 
         // 4. Get initial pose
         double xCur, yCur, zCur, rollCur, pitchCur, yawCur;
@@ -1031,7 +1048,10 @@ public:
         if (tracking_debug)
             printf("meas size: %d, tracked size: %d\n", (int)target_meas.size(), (int)tracked.size());
         
+        init_time += tracking_time.toc();
         ROS_WARN("Tracking time: %f ms", tracking_time.toc());
+        trk_times.push_back(init_time);
+        trk_cnts.push_back(nonground_ds->points.size());
         tracker_map.setMap(track_clusters);
         publishClusteredCloud(&pub_tracker_cluster, &pub_tracker_centroid, &pub_tracker_cluster_info, tracker_map, cloudHeader.stamp, odometryFrame);
     
@@ -1044,8 +1064,12 @@ public:
         publishCloud(&pub_static_scene, ordered, cloudHeader.stamp, odometryFrame);
 
         // 10. Publish assoicated bounding box
-        publishAssociatedBoundingBox(&pub_associated_bbox, tracker_to_meas, meas_map, 
-                                     init_transform, cloudHeader.stamp, lidarFrame);
+        if (dataType == "carla")
+            publishAssociatedBoundingBoxCarla(&pub_associated_bbox, tracker_to_meas, meas_map, 
+                                        init_transform, cloudHeader.stamp, lidarFrame);
+        else if (dataType == "kitti") 
+            publishAssociatedBoundingBoxKitti(&pub_associated_bbox, tracker_to_meas, meas_map, tracker_map, 
+                                init_transform, cloudHeader.stamp, lidarFrame);
     }
 
     void dynamicRemoval(std::map<int, int> association_map,
@@ -1399,7 +1423,7 @@ public:
         }
     }
 
-    void publishAssociatedBoundingBox(ros::Publisher *this_pub, map<int, int> association_map, ClusterMap map, 
+    void publishAssociatedBoundingBoxCarla(ros::Publisher *this_pub, map<int, int> association_map, ClusterMap map, 
                                       tf::StampedTransform tf_odom_baselink, ros::Time timestamp, string this_frame) {
         if (this_pub->getNumSubscribers() != 0) {
             jsk_recognition_msgs::BoundingBoxArray bbox_array;
@@ -1436,6 +1460,68 @@ public:
                     bbox.pose.orientation.z = t_baselink_bbox.getRotation().z();
                     bbox.pose.orientation.w = t_baselink_bbox.getRotation().w();
                     bbox_array.boxes.push_back(bbox);
+                }
+            }
+            this_pub->publish(bbox_array);
+        }
+    } 
+
+
+    void publishAssociatedBoundingBoxKitti(ros::Publisher *this_pub, map<int, int> association_map, ClusterMap meas_map, ClusterMap track_map, 
+                                      tf::StampedTransform tf_odom_baselink, ros::Time timestamp, string this_frame) {
+        if (this_pub->getNumSubscribers() != 0) {
+            jsk_recognition_msgs::BoundingBoxArray bbox_array;
+            bbox_array.header.stamp = timestamp;
+            bbox_array.header.frame_id = this_frame;
+            std::vector<Cluster> meas_clusters = meas_map.getMap();
+            std::vector<Cluster> trk_clusters = track_map.getMap();
+
+            for (size_t i = 0; i < meas_clusters.size(); ++i) {
+                
+                int track_id = -1;
+                
+                for (const auto element : association_map) {
+                    if (element.second == meas_clusters[i].id) {
+                        track_id = element.first;
+                        break;
+                    }
+                }
+
+                float speed;
+                if (track_id >= 0) {
+                    Cluster associated_trk;
+                    for (size_t j = 0; j < trk_clusters.size(); j++) {
+                        if (trk_clusters[j].id == track_id) {
+                            associated_trk = trk_clusters[j];
+                            break;
+                        }
+                    }
+                    if (associated_trk.mode >= 0.0) {
+                        jsk_recognition_msgs::BoundingBox bbox = meas_clusters[i].bbox;
+                        // transform bbox from "odom" to "base_link"
+                        bbox.label = track_id;
+                        bbox.header.stamp = timestamp;
+                        bbox.header.frame_id = this_frame;
+                        tf::Transform t_odom_bbox;
+                        tf::poseMsgToTF(bbox.pose, t_odom_bbox);
+                        tf::Transform t_baselink_bbox = tf_odom_baselink.inverse() * t_odom_bbox;
+                        speed = sqrt(associated_trk.vel_x * associated_trk.vel_x + associated_trk.vel_y*associated_trk.vel_y);
+                        // check dynamicity
+                        if (associated_trk.mode == 1){ // dynamic 
+                            if (speed < velThres) {
+                                associated_trk.mode = 0;
+                            }
+                        } 
+                        bbox.value = associated_trk.mode * 1.0;
+                        bbox.pose.position.x = t_baselink_bbox.getOrigin().x();
+                        bbox.pose.position.y = t_baselink_bbox.getOrigin().y();
+                        bbox.pose.position.z = t_baselink_bbox.getOrigin().z();
+                        bbox.pose.orientation.x = t_baselink_bbox.getRotation().x();
+                        bbox.pose.orientation.y = t_baselink_bbox.getRotation().y();
+                        bbox.pose.orientation.z = t_baselink_bbox.getRotation().z();
+                        bbox.pose.orientation.w = t_baselink_bbox.getRotation().w();
+                        bbox_array.boxes.push_back(bbox);
+                    }
                 }
             }
             this_pub->publish(bbox_array);

@@ -112,7 +112,7 @@ tracking:
     minZ: -10.0
     maxR: 100.0
     clusteringTolerance: 0.5 # opt 0.5
-    minClusterSize: 10 # opt 4
+    minClusterSize: 30 # opt 30
     maxClusterSize: 5000 # opt 5000
     graphDistThres: 0.1 # horizontal
     graphMergeThres: 1.2 # vertical
@@ -129,8 +129,8 @@ tracking:
     weightBirth: 0.2
     samplingPeriod: 0.1
     processNoise: 1e-12
-    spawnPoseNoise: 100 # opt: 100
-    spawnVelNoise: 60 # opt: 50
+    spawnPoseNoise: 40 # opt: 40
+    spawnVelNoise: 10 # opt: 10
     detectionProb: 1.0
     measPoseNoise: 1.0
     measSpeedNoise: 4.0
@@ -163,9 +163,11 @@ removal:
 experiment:
   slam_save_dir: "/home/euigon/experiment/traj_result_dynamic/"
   trk_save_dir: "/home/euigon/experiment/trk_result/"
+  dyn_save_dir: "/home/euigon/experiment/dyn_result/"
   eval_tracking: false
+  eval_dynamic: true
   eval_slam: false
-  eval_clustering: true
+  eval_clustering: false
   max_out_cnt: 20
   lidar_scope: 40.0
   min_pt_cnt: 30

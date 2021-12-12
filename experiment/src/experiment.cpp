@@ -52,6 +52,20 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(CarlaPointXYZCIT,
     (uint32_t, ObjIdx, ObjIdx) (uint32_t, ObjTag, ObjTag) 
 )
 
+struct VelodynePointXYZIRT
+{
+    PCL_ADD_POINT4D
+    PCL_ADD_INTENSITY;
+    uint16_t ring;
+    float time;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+} EIGEN_ALIGN16;
+POINT_CLOUD_REGISTER_POINT_STRUCT (VelodynePointXYZIRT,
+    (float, x, x) (float, y, y) (float, z, z) (float, intensity, intensity)
+    (uint16_t, ring, ring) (float, time, time)
+)
+
+using PointXYZIRT = VelodynePointXYZIRT;
 using PointCarla = CarlaPointXYZCIT;
 
 class Track 
@@ -97,12 +111,13 @@ class Statistics
         // Tracking
         std::vector<int> FN;
         std::vector<int> FP;
+        std::vector<int> TP;
         std::vector<int> SWC;
         std::vector<int> GT;
         std::vector<float> MOTA;
         std::vector<int> FRAG;
         std::vector<float> trk_ratio;
-        int t_FN = 0, t_FP = 0, t_SWC = 0, t_GT = 0;
+        int t_FN = 0, t_FP = 0, t_SWC = 0, t_GT = 0, t_TP = 0;
         float t_MOTA = 0.0;
         int t_FRAG = 0;
         int MT = 0; // mostly tracked
@@ -129,10 +144,13 @@ class Experiment
         string slam_save_dir;
         string trk_save_dir;
         string cls_save_dir;
+        string dyn_save_dir;
         string cluster_method;
         string odom_topic;
+        string point_topic;
         bool eval_slam;
         bool eval_tracking;
+        bool eval_dynamic;
         bool eval_clustering;
 
         // string SAVE_DIR = "/home/euigon/experiment/traj_result/";
@@ -149,6 +167,7 @@ class Experiment
         ros::Publisher pub_gt_bbox;
         ros::Publisher pub_trk_cloud;
         ros::Publisher pub_cmp_bbox;
+        ros::Subscriber sub_labeled_cloud;
 
         // SLAM
         ros::Publisher pub_gt_odom;
@@ -161,9 +180,6 @@ class Experiment
         // Raw
         ros::Subscriber sub_raw_cloud;
 
-        // tracking
-        ros::Subscriber sub_labeled_cloud;
-
         // queues
         deque<geometry_msgs::TransformStamped> gt_odom_queue;
         deque<nav_msgs::Odometry> est_odom_queue;
@@ -173,6 +189,10 @@ class Experiment
         
         tf::Transform t_map_odom;
         map<uint32_t, Track> track_table;
+
+        // dyanmic classification
+        ros::Subscriber sub_kitti_gt_bbox;
+        string data_type;
 
         // tracking params
         float lidar_scope;
@@ -197,12 +217,18 @@ class Experiment
 
         nh.param<string>("experiment/slam_save_dir", slam_save_dir, "/home/euigon/experiment/traj_result/");
         nh.param<string>("experiment/trk_save_dir", trk_save_dir, "/home/euigon/experiment/trk_result/");
+        nh.param<string>("experiment/dyn_save_dir", dyn_save_dir, "/home/euigon/experiment/trk_result/");
+
+        nh.param<string>("rosbag/type", data_type, "");
+        nh.param<string>("lio_sam/pointCloudTopic", point_topic, "");
         nh.param<string>("experiment/cluster_save_dir", cls_save_dir, "");
         nh.param<string>("tracking/clustering/method", cluster_method, "");
         nh.param<string>("lio_sam/odomTopic", odom_topic, "odometry");
         nh.param<bool>("experiment/eval_tracking", eval_tracking, false);
         nh.param<bool>("experiment/eval_clustering", eval_clustering, false);
         nh.param<bool>("experiment/eval_slam", eval_slam, false);
+        nh.param<bool>("experiment/eval_dynamic", eval_dynamic, false);
+
         nh.param<float>("experiment/lidar_scope", lidar_scope, 40.0);
         nh.param<int>("experiment/max_out_cnt", max_out_cnt, 10);
         nh.param<int>("experiment/min_pt_cnt", min_pt_cnt, 10);
@@ -215,6 +241,7 @@ class Experiment
         pub_trk_cloud = nh.advertise<sensor_msgs::PointCloud2>("/exp/trk/cloud", 1);
         sub_est_bbox = nh.subscribe<jsk_recognition_msgs::BoundingBoxArray>("/exp/est_bbox", 2000, &Experiment::estBoundingBoxCallback, this, ros::TransportHints().tcpNoDelay());
         sub_gt_bbox = nh.subscribe<derived_object_msgs::ObjectArray>("/carla/objects", 2000, &Experiment::objectCallback, this, ros::TransportHints().tcpNoDelay());
+        sub_kitti_gt_bbox = nh.subscribe<jsk_recognition_msgs::BoundingBoxArray>("/objects", 2000, &Experiment::kittiObjectCallback, this, ros::TransportHints().tcpNoDelay());
         pub_gt_bbox = nh.advertise<jsk_recognition_msgs::BoundingBoxArray>("/exp/gt_bbox", 1);
         pub_cmp_bbox = nh.advertise<jsk_recognition_msgs::BoundingBoxArray>("/exp/cmp_bbox", 1);
 
@@ -224,7 +251,7 @@ class Experiment
         sub_estimated_odom = nh.subscribe<nav_msgs::Odometry>("/lio_sam/mapping/odometry", 2000, &Experiment::estimatedOdomCallback, this, ros::TransportHints().tcpNoDelay());
         
         // semantic
-        sub_raw_cloud = nh.subscribe<sensor_msgs::PointCloud2>("/carla/ego_vehicle/semantic_lidar/", 2000, &Experiment::cloudCallback, this, ros::TransportHints().tcpNoDelay());
+        sub_raw_cloud = nh.subscribe<sensor_msgs::PointCloud2>(point_topic, 2000, &Experiment::cloudCallback, this, ros::TransportHints().tcpNoDelay());
         sub_tf = nh.subscribe<tf2_msgs::TFMessage>("/tf", 2000, &Experiment::tfCallback, this, ros::TransportHints().tcpNoDelay());
         
         // clustering
@@ -245,6 +272,11 @@ class Experiment
         if (eval_clustering) {
             ofstream cls_output(cls_save_dir + cluster_method +"_entropy.csv");
             cls_output.close();
+        }
+
+        if (eval_dynamic) {
+            ofstream dyn_output(dyn_save_dir + "result.csv");
+            dyn_output.close();
         }
 
         // allocate memory
@@ -326,6 +358,32 @@ class Experiment
             trk_output.close();
             std::cout<<"\033[1;32m"<< "Done..." <<"\033[0m"<<std::endl;
 
+            exit(1);
+        }
+
+        if (eval_dynamic) {
+            std::cout<<"\033[1;32m"<< "You pressed Ctrl+C..." <<"\033[0m"<<std::endl;
+            std::cout<<"\033[1;32m"<< "Saving to " << dyn_save_dir << "\033[0m"<<std::endl;
+
+            std::ofstream dyn_output(dyn_save_dir + "result.csv", std::ios::app);
+
+            std::vector<double> precisions;
+            std::vector<double> recalls;
+            double precision;
+            double recall;
+            for (size_t i = 0; i < stat.TP.size(); i++) {
+                precision = stat.TP[i] / (1.0*(stat.TP[i] + stat.FP[i]));
+                recall = stat.TP[i] / (1.0*(stat.TP[i] + stat.FN[i]));
+                dyn_output << stat.TP[i] <<"," << stat.FP[i] << "," << stat.FN[i] << ",";
+                dyn_output << precision << ","<< recall << endl;
+                precisions.push_back(precision);
+                recalls.push_back(recall);
+            }
+            dyn_output << std::accumulate(precisions.begin(), precisions.end(), 0.0) / stat.TP.size() << ","<< 
+            std::accumulate(recalls.begin(), recalls.end(), 0.0) / stat.TP.size() << endl;
+
+            dyn_output.close();
+            std::cout<<"\033[1;32m"<< "Done..." <<"\033[0m"<<std::endl;
             exit(1);
         }
 
@@ -500,6 +558,10 @@ class Experiment
         stat.PR_entropies.push_back(PR_entropy);
     }
 
+    void kittiObjectCallback(const jsk_recognition_msgs::BoundingBoxArray::ConstPtr &msg_in) {
+        gt_bbox_queue.push_back(*msg_in);
+    }
+
     void objectCallback(const derived_object_msgs::ObjectArray::ConstPtr &msg_in) {
         jsk_recognition_msgs::BoundingBoxArray bbox_array;
         bbox_array.header.stamp = msg_in->header.stamp;
@@ -584,23 +646,26 @@ class Experiment
         pcl::PointCloud<PointCarla>::Ptr carla_cloud(new pcl::PointCloud<PointCarla>());
         sensor_msgs::PointCloud2 current_cloud = *msg_in;
         cloud_queue.push_back(current_cloud);
-        pcl::moveFromROSMsg(current_cloud, *carla_cloud);
+        // pcl::moveFromROSMsg(current_cloud, *carla_cloud);
 
-        cout << "Time: " << msg_in->header.stamp.toSec() << endl;
-        for (auto pt : carla_cloud->points) {
-            // for (const auto bbox : cur_bbox_array.boxes) {
-            // }
-            if (pt.ObjIdx > 0) {
-                // cout << pt.x << ";" << pt.y << ";" << pt.z << " idx: " << pt.ObjIdx << " tag: " << pt.ObjTag << endl;
-            }
-        }
+        // cout << "Time: " << msg_in->header.stamp.toSec() << endl;
+        // for (auto pt : carla_cloud->points) {
+        //     // for (const auto bbox : cur_bbox_array.boxes) {
+        //     // }
+        //     if (pt.ObjIdx > 0) {
+        //         // cout << pt.x << ";" << pt.y << ";" << pt.z << " idx: " << pt.ObjIdx << " tag: " << pt.ObjTag << endl;
+        //     }
+        // }
     }
 
     void estBoundingBoxCallback(const jsk_recognition_msgs::BoundingBoxArray::ConstPtr &msg_in) {
-        if (eval_tracking) {
+        if (eval_tracking || eval_dynamic) {
             jsk_recognition_msgs::BoundingBoxArray cur_bbox = *msg_in;
             est_bbox_queue.push_back(cur_bbox);
-            tracking_evaluate();
+            if (data_type == "carla")
+                tracking_evaluate_carla();
+            else if (data_type == "kitti")
+                tracking_evaluate_kitti();
         }
     }
 
@@ -612,7 +677,182 @@ class Experiment
         }
     }
 
-    void tracking_evaluate() {
+   void tracking_evaluate_kitti() {
+        printf("---------EVALUATING KITTI DATASET-------------\n");
+        printf("est bbox: %d, cloud_queue: %d, gt bbox: %d\n", (int)est_bbox_queue.size(), (int)cloud_queue.size(), (int)gt_bbox_queue.size());
+
+        if (est_bbox_queue.empty() || cloud_queue.empty() || gt_bbox_queue.empty()) 
+            return;
+        
+        jsk_recognition_msgs::BoundingBoxArray cur_bbox_array = est_bbox_queue.front();
+        est_bbox_queue.pop_front();
+
+        // look for point cloud
+        while (cloud_queue.front().header.stamp < cur_bbox_array.header.stamp) {
+            cloud_queue.pop_front();
+        }
+        if (cloud_queue.empty())
+            return;
+
+        // look for the gt bbox for tracking
+        while (gt_bbox_queue.front().header.stamp < cur_bbox_array.header.stamp){
+            gt_bbox_queue.pop_front();                
+        }
+        if (gt_bbox_queue.empty())
+            return;
+
+        sensor_msgs::PointCloud2 current_cloud = cloud_queue.front();
+        jsk_recognition_msgs::BoundingBoxArray gt_bbox = gt_bbox_queue.front();
+        assert(current_cloud.front().header.stamp.toSec() == cur_bbox_array.header.stamp.toSec());
+        assert(gt_bbox.header.stamp.toSec() == cur_bbox_array.header.stamp.toSec());
+    
+        // transform gt_bbox to "old_lidar_link" reference
+        gt_bbox.header.frame_id = "old_lidar_link";
+        for (size_t i = 0; i < gt_bbox.boxes.size(); i++) {
+            gt_bbox.boxes[i].header.frame_id = "old_lidar_link";
+        }
+
+        // publish
+        current_cloud.header.frame_id = "old_lidar_link";
+        jsk_recognition_msgs::BoundingBoxArray est_dynamic_bbox;
+        est_dynamic_bbox.header.frame_id = "old_lidar_link";
+        for (size_t i = 0; i < cur_bbox_array.boxes.size(); i++) {
+            cur_bbox_array.boxes[i].header.frame_id = "old_lidar_link";
+            jsk_recognition_msgs::BoundingBox bbox = cur_bbox_array.boxes[i];
+            if (bbox.value == 1.0) {
+                // filter estimation not in camera view
+                if (abs(bbox.pose.position.y / bbox.pose.position.x) > 0.86 || bbox.pose.position.x < 0 || abs(bbox.pose.position.z / bbox.pose.position.x) > 10)
+                    continue;
+                printf("est: %f;%f;%f\n", bbox.pose.position.x, bbox.pose.position.y, bbox.pose.position.z);
+                est_dynamic_bbox.boxes.push_back(bbox);   
+            }
+        }
+
+        if (pub_trk_cloud.getNumSubscribers() != 0)
+            pub_trk_cloud.publish(current_cloud);
+        if (pub_trk_est_bbox.getNumSubscribers() != 0)
+            pub_trk_est_bbox.publish(est_dynamic_bbox);   
+        if (pub_gt_bbox.getNumSubscribers() != 0)
+            pub_gt_bbox.publish(gt_bbox);
+
+        /* ----------------------
+         * START EVALUATION
+         * ---------------------- */
+        int c_false_pos = 0;
+        int c_true_pos = 0;
+        int c_pos = 0;
+        int c_false_neg = 0;
+
+        jsk_recognition_msgs::BoundingBoxArray inside_scope_bbox;
+        inside_scope_bbox.header = gt_bbox.header;
+
+        map<uint32_t, bool> gt_checker;
+
+        // Neagtives
+        set<int> associated;
+        for (auto gt : gt_bbox.boxes) {
+
+            std::shared_ptr<Track> cur_tracker(new Track(gt.label, (int)gt.value));
+
+            // get number of points inside bounding box
+            pcl::PointCloud<PointXYZIRT>::Ptr inside_points(new pcl::PointCloud<PointXYZIRT>());
+            
+            insideBBOX(current_cloud, gt, *inside_points);
+            // printf("Inside points num: %d\n", inside_points->size());
+
+            if (inside_points->points.size() >= min_pt_cnt) { 
+                inside_scope_bbox.boxes.push_back(gt);
+                
+                // check iou
+                vector<jsk_recognition_msgs::BoundingBox> candidates;
+                vector<double> ious;
+                c_pos = 0;
+                for (auto est: est_dynamic_bbox.boxes) {
+                    if (est.value == 1.0) { // dynamic
+                        c_pos++;
+                        IOU::Vertexes gt_vertices;
+                        IOU::Vertexes est_vertices;
+                        bboxToVerticies(gt, gt_vertices);
+                        bboxToVerticies(est, est_vertices);
+                        double iou = IOU::iouEx(gt_vertices, est_vertices);
+                        if (iou > 0) {
+                            candidates.push_back(est);
+                            ious.push_back(iou);
+                            // cout << "Negatives" << endl;
+                            // cout << "gt: " << gt.pose.position.x << ";"<<gt.pose.position.y << ";"<<gt.pose.position.z << endl;
+                            // cout << "est: " << est.pose.position.x << ";"<<est.pose.position.y << ";"<<est.pose.position.z << endl;
+                            // cout << "iou: " << iou << endl;
+                        } 
+                    }
+                }
+                if (candidates.size() == 0) {
+                    c_false_neg++;
+                } else if (candidates.size() > 0) {
+                    c_true_pos++;
+                }
+            } 
+        }
+        // no predictions at all 
+        if (c_pos == 0) {
+            ROS_ERROR("No prediction");
+            return;
+        }
+        
+
+        c_false_pos = c_pos - c_true_pos;
+
+        
+        // gt_checker.clear();
+        // // Positives
+        // for (auto est : est_dynamic_bbox.boxes) {
+        //     if (est.value == 1.0) { // dynamic
+        //         // filter estimation not in camera view
+        //         if (abs(est.pose.position.y / est.pose.position.x) > 0.86 || est.pose.position.x < 0 || abs(est.pose.position.z / est.pose.position.x) > 10)
+        //             continue;
+
+        //         c_pos++;
+
+        //         for (auto gt: gt_bbox.boxes) {
+        //             if (gt_checker.find(gt.label) != gt_checker.end())
+        //                 continue;
+        //             // get number of points inside bounding box
+        //             pcl::PointCloud<PointXYZIRT>::Ptr inside_points(new pcl::PointCloud<PointXYZIRT>());
+        //             insideBBOX(current_cloud, gt, *inside_points);
+        //             // printf("Inside points num: %d\n", inside_points->size());
+
+        //             if (inside_points->points.size() >= min_pt_cnt) { 
+
+        //                 IOU::Vertexes gt_vertices;
+        //                 IOU::Vertexes est_vertices;
+        //                 bboxToVerticies(gt, gt_vertices);
+        //                 bboxToVerticies(est, est_vertices);
+        //                 double iou = IOU::iouEx(gt_vertices, est_vertices);
+        //                 if (iou > 0) {
+        //                     cout << "Positives" << endl;
+        //                     cout << "gt: " << gt.pose.position.x << ";"<<gt.pose.position.y << ";"<<gt.pose.position.z << endl;
+        //                     cout << "est: " << est.pose.position.x << ";"<<est.pose.position.y << ";"<<est.pose.position.z << endl;
+        //                     cout << "iou: " << iou << endl;
+        //                     c_true_pos++;
+        //                     gt_checker.insert(std::make_pair(gt.label, true));
+        //                 }
+        //             }
+        //         }
+        //     }         
+        // }
+        // update overall metric
+        stat.t_FN += c_false_neg;
+        stat.t_FP += c_false_pos;
+        stat.t_TP += c_true_pos;
+        stat.TP.push_back(c_true_pos);
+        stat.FN.push_back(c_false_neg);
+        stat.FP.push_back(c_false_pos);
+        cout << "FN: " << c_false_neg << " FP: " << c_false_pos << " TP: " << c_true_pos << " Total pos:" << c_pos << endl;
+        cout << c_true_pos / (1.0*(c_pos)) << ","<< c_true_pos / (1.0*(c_true_pos + c_false_neg)) << endl;
+        if (pub_cmp_bbox.getNumSubscribers() != 0)
+            pub_cmp_bbox.publish(inside_scope_bbox);
+    }
+
+    void tracking_evaluate_carla() {
 
         /* -------------------------
          * RETRIEVE DATA & VISUALIZE
