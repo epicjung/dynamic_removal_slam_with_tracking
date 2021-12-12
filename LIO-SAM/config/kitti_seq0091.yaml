@@ -112,9 +112,9 @@ tracking:
     minZ: -10.0
     maxR: 100.0
     clusteringTolerance: 0.5 # opt 0.5
-    minClusterSize: 30 # opt 30
+    minClusterSize: 4 # opt 4
     maxClusterSize: 5000 # opt 5000
-    graphDistThres: 0.1 # horizontal
+    graphDistThres: 0.1 # horizontal (0.1)
     graphMergeThres: 1.2 # vertical
     graphLookupSize: 6
     graphAngleThres: 20.0
@@ -144,10 +144,10 @@ tracking:
   lshape:
     minHeight: 0.5 # opt: 0.5
     maxHeight: 3.0
-    maxArea: 30.0 
-    maxRatio: 9.0 # opt: 9.0
-    minDensity: 3.0
-    maxDensity: 1500
+    maxArea: 20.0 # opt: 30 
+    maxRatio: 7.0 # opt: 9.0
+    minDensity: 5.0 # opt: 3.0
+    maxDensity: 150 # opt: 1500
 
 # ----------------------
 # REMOVAL
@@ -169,7 +169,7 @@ experiment:
   eval_slam: false
   eval_clustering: false
   max_out_cnt: 20
-  lidar_scope: 40.0
+  lidar_scope: 40.0 # opt: 40
   min_pt_cnt: 30
   gnd_ratio: 0.9
   

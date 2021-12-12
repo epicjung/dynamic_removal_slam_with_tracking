@@ -111,10 +111,11 @@ public:
         patchwise_ground_.reserve(NUM_EXPERINEMTAL_MAX_PATCH);
         patchwise_nonground_.reserve(NUM_EXPERINEMTAL_MAX_PATCH);
         patchwise_obstacle_.reserve(NUM_EXPERINEMTAL_MAX_PATCH);
-
+        initial_guess_ptCloud_.reserve(NUM_EXPERINEMTAL_MAX_PATCH);
         PlaneViz = node_handle_.advertise<jsk_recognition_msgs::PolygonArray>("/patchwork/patches",100);
         revert_pc_pub = node_handle_.advertise<sensor_msgs::PointCloud2>("/revert_pc",100);
         reject_pc_pub = node_handle_.advertise<sensor_msgs::PointCloud2>("/reject_pc",100);
+        initial_guess_pub_ = node_handle_.advertise<sensor_msgs::PointCloud2>("/initial_guess_pc",100);
 
         if (mode_ == "uniform") init_regionwise_patches(patches_, num_sectors_, num_rings_);
         else if (mode_ == "non_uniform"){
@@ -194,6 +195,7 @@ private:
     RegionwisePatches patches_;
 
     ros::Publisher PlaneViz, revert_pc_pub, reject_pc_pub;
+    ros::Publisher initial_guess_pub_;
     pcl::PointCloud<pcl::PointXYZI> revert_pc , reject_pc;
     pcl::PointCloud<pcl::PointXYZI> ground_pc_;
     pcl::PointCloud<pcl::PointXYZI> non_ground_pc_;
@@ -202,6 +204,7 @@ private:
     pcl::PointCloud<pcl::PointXYZI> patchwise_ground_;
     pcl::PointCloud<pcl::PointXYZI> patchwise_nonground_;
     pcl::PointCloud<pcl::PointXYZI> patchwise_obstacle_;
+    pcl::PointCloud<pcl::PointXYZI> initial_guess_ptCloud_;
     //
     void init_regionwise_patches(RegionwisePatches& patches, int num_sectors, int num_rings);
     void clear_patches(RegionwisePatches& patches, int num_sectors, int num_rings);
@@ -312,6 +315,7 @@ void Patchwork_M::estimate_ground(const pcl::PointCloud<pcl::PointXYZI>& cloudIn
   obstacle_pc_.clear();
   if(!revert_pc.empty()) revert_pc.clear();
   if(!reject_pc.empty()) reject_pc.clear();
+  if(!initial_guess_ptCloud_.empty()) initial_guess_ptCloud_.clear();
 
   if (mode_ == "uniform"){  // 4(a) uniform-sized patchwise ground extraction
     for (uint16_t ring_idx = 0; ring_idx < num_rings_; ++ring_idx){
@@ -437,14 +441,19 @@ void Patchwork_M::estimate_ground(const pcl::PointCloud<pcl::PointXYZI>& cloudIn
       sensor_msgs::PointCloud2 cloud_ROS;
       pcl::toROSMsg(revert_pc, cloud_ROS);
       cloud_ROS.header.stamp = ros::Time::now();
-      cloud_ROS.header.frame_id = cloud_frame;
+      cloud_ROS.header.frame_id = "base_link";
       revert_pc_pub.publish(cloud_ROS);
       pcl::toROSMsg(reject_pc, cloud_ROS);
       cloud_ROS.header.stamp = ros::Time::now();
-      cloud_ROS.header.frame_id = cloud_frame;
+      cloud_ROS.header.frame_id = "base_link";
       reject_pc_pub.publish(cloud_ROS);
     }
   }
+  sensor_msgs::PointCloud2 initial_ptCloud;
+  pcl::toROSMsg(initial_guess_ptCloud_, initial_ptCloud);
+  initial_ptCloud.header.stamp = ros::Time::now();
+  initial_ptCloud.header.frame_id = "base_link";
+  initial_guess_pub_.publish(initial_ptCloud);
   obstacle_pc_ = cloudObstacle;
   end = clock();
   time_taken = (double)(end-start)/CLOCKS_PER_SEC;
@@ -570,7 +579,6 @@ void Patchwork_M::extract_patchwiseground(const pcl::PointCloud<pcl::PointXYZI>&
 
   // 1. Set seeds
   extract_initial_seeds_(src, ground_pc_);
-
   // 2. Extract ground
   for(int i=0; i<num_iter_; i++){
     estimate_plane_(ground_pc_);
@@ -805,6 +813,7 @@ void Patchwork_M::extract_patchwiseground(const int zone_idx, const pcl::PointCl
 
   // 1. set seeds!
   extract_initial_seeds_(zone_idx, src, ground_pc_);
+  initial_guess_ptCloud_+=ground_pc_;
 
   // 2. Extract ground
   for(int i=0; i<num_iter_; i++){

@@ -109,7 +109,7 @@ tracking:
     maxZ: 3.0
     minZ: -10.0
     maxR: 100.0
-    clusteringTolerance: 1.0 # opt 0.5
+    clusteringTolerance: 0.5 # opt 0.5
     minClusterSize: 5 # opt 5
     maxClusterSize: 5000 # opt 5000
     graphDistThres: 0.3 # horizontal (opt 0.3)
@@ -151,7 +151,7 @@ tracking:
 # REMOVAL
 # ----------------------
 removal:
-  enableDynamicRemoval: false
+  enableDynamicRemoval: true
   velThres: 0.05
   modeProbThres: 0.5
 
@@ -159,11 +159,11 @@ removal:
 # EXPERIMENT
 # ----------------------
 experiment:
-  slam_save_dir: "/home/euigon/experiment/traj_result/"
+  slam_save_dir: "/home/euigon/experiment/traj_result_dynamic/highway/"
   trk_save_dir: "/home/euigon/experiment/trk_result/"
   cluster_save_dir: "/home/euigon/experiment/cls_result/"
-  eval_tracking: true
-  eval_slam: false
+  eval_tracking: false
+  eval_slam: true
   eval_clustering: false
   max_out_cnt: 20
   lidar_scope: 40.0
