@@ -133,6 +133,7 @@ private:
     // tracking experiments
     std::vector<int> trk_cnts;
     std::vector<double> trk_times;
+    map<int, int> dyn_cnt_by_id;
     
 
 public:
@@ -1019,22 +1020,53 @@ public:
         target_tracker.propagate();
 
         // 8. Get tracker
-        const auto tracked = target_tracker.getTrackedTargets2(minWeightTrack);
+        auto tracked = target_tracker.getTrackedTargets2(minWeightTrack);
         
         tracker_map.clear();
         std::vector<Cluster> track_clusters;
         std::map<int, Cluster> track_clusters_map;
         if (tracking_debug)
             printf("Tracked\n");
+        
+        // Check dynamicity
+        double speed;
         for (size_t i = 0; i < tracked.size(); i++)
         {
             Cluster cluster;
             cluster.id = tracked[i].id;
             cluster.centroid_x = tracked[i].position[0];
             cluster.centroid_y = tracked[i].position[1];
-            cluster.feature = sqrt(pow(tracked[i].speed[0], 2) + pow(tracked[i].speed[1], 2));
             cluster.vel_x = tracked[i].speed[0];
             cluster.vel_y = tracked[i].speed[1];
+
+            // check speed
+            speed = sqrt(cluster.vel_x * cluster.vel_x + cluster.vel_y * cluster.vel_y);            
+            if (tracked[i].type == 1){  
+                if (speed < velThres) {
+                    tracked[i].type = 0;
+                }
+            } 
+            
+            if (enableDynamicCount) {
+                // update dynamic count
+                if (tracked[i].type == 1) {
+                    if (dyn_cnt_by_id.find(tracked[i].id) == dyn_cnt_by_id.end()) {
+                        dyn_cnt_by_id.insert(make_pair(tracked[i].id, 1));
+                    } else {
+                        dyn_cnt_by_id[tracked[i].id]++;
+                    }
+                }
+
+                // check dynamic count
+                if (dyn_cnt_by_id[tracked[i].id] >= dynamicCnt) {
+                    printf("Over -- id: %d, cnt: %d\n", tracked[i].id, dyn_cnt_by_id[tracked[i].id]);
+                    tracked[i].type = 1;
+                } else {
+                    // printf("Under -- id: %d, cnt: %d\n", tracked[i].id, dyn_cnt_by_id[tracked[i].id]);
+                    tracked[i].type = 0;
+                }
+            }
+
             cluster.mode = tracked[i].type;
             cluster.prob = tracked[i].prob;
             cluster.weight = tracked[i].weight;
@@ -1065,7 +1097,7 @@ public:
 
         // 10. Publish assoicated bounding box
         if (dataType == "carla")
-            publishAssociatedBoundingBoxCarla(&pub_associated_bbox, tracker_to_meas, meas_map, 
+            publishAssociatedBoundingBoxCarla(&pub_associated_bbox, tracker_to_meas, meas_map, tracker_map,
                                         init_transform, cloudHeader.stamp, lidarFrame);
         else if (dataType == "kitti") 
             publishAssociatedBoundingBoxKitti(&pub_associated_bbox, tracker_to_meas, meas_map, tracker_map, 
@@ -1301,6 +1333,7 @@ public:
                     else
                         id.color.b = 1.0;
                 } else {
+                    printf("neither static nor dynamic\n");
                     id.color.a = 0.0;
                 }
                 ids.markers.push_back(id);
@@ -1423,29 +1456,39 @@ public:
         }
     }
 
-    void publishAssociatedBoundingBoxCarla(ros::Publisher *this_pub, map<int, int> association_map, ClusterMap map, 
+    void publishAssociatedBoundingBoxCarla(ros::Publisher *this_pub, map<int, int> association_map, ClusterMap meas_map, ClusterMap track_map,
                                       tf::StampedTransform tf_odom_baselink, ros::Time timestamp, string this_frame) {
         if (this_pub->getNumSubscribers() != 0) {
             jsk_recognition_msgs::BoundingBoxArray bbox_array;
             bbox_array.header.stamp = timestamp;
             bbox_array.header.frame_id = this_frame;
-            std::vector<Cluster> cluster_map = map.getMap();
+            std::vector<Cluster> meas_clusters = meas_map.getMap();
+            std::vector<Cluster> trk_clusters = track_map.getMap();
 
-            for (size_t i = 0; i < cluster_map.size(); ++i) {
+            for (size_t i = 0; i < meas_clusters.size(); ++i) {
                 
                 int track_id = -1;
                 
                 for (const auto element : association_map) {
-                    if (element.second == cluster_map[i].id) {
+                    if (element.second == meas_clusters[i].id) {
                         track_id = element.first;
                         break;
                     }
                 }
 
                 if (track_id >= 0) {
-                    jsk_recognition_msgs::BoundingBox bbox = cluster_map[i].bbox;
+                    Cluster associated_trk;
+                    for (size_t j = 0; j < trk_clusters.size(); j++) {
+                        if (trk_clusters[j].id == track_id) {
+                            associated_trk = trk_clusters[j];
+                            break;
+                        }
+                    }
+                    
+                    jsk_recognition_msgs::BoundingBox bbox = meas_clusters[i].bbox;
                     // transform bbox from "odom" to "base_link"
                     bbox.label = track_id;
+                    bbox.value = associated_trk.mode * 1.0; // no tracker: -1.0, static: 0.0, dynamic: 1.0
                     bbox.header.stamp = timestamp;
                     bbox.header.frame_id = this_frame;
                     tf::Transform t_odom_bbox;
@@ -1460,6 +1503,7 @@ public:
                     bbox.pose.orientation.z = t_baselink_bbox.getRotation().z();
                     bbox.pose.orientation.w = t_baselink_bbox.getRotation().w();
                     bbox_array.boxes.push_back(bbox);
+                    
                 }
             }
             this_pub->publish(bbox_array);
@@ -1496,7 +1540,7 @@ public:
                             break;
                         }
                     }
-                    if (associated_trk.mode >= 0.0) {
+                    if (associated_trk.mode >= 0) {
                         jsk_recognition_msgs::BoundingBox bbox = meas_clusters[i].bbox;
                         // transform bbox from "odom" to "base_link"
                         bbox.label = track_id;
@@ -1506,12 +1550,12 @@ public:
                         tf::poseMsgToTF(bbox.pose, t_odom_bbox);
                         tf::Transform t_baselink_bbox = tf_odom_baselink.inverse() * t_odom_bbox;
                         speed = sqrt(associated_trk.vel_x * associated_trk.vel_x + associated_trk.vel_y*associated_trk.vel_y);
-                        // check dynamicity
-                        if (associated_trk.mode == 1){ // dynamic 
-                            if (speed < velThres) {
-                                associated_trk.mode = 0;
-                            }
-                        } 
+                        // // check dynamicity
+                        // if (associated_trk.mode == 1){ // dynamic 
+                        //     if (speed < velThres) {
+                        //         associated_trk.mode = 0;
+                        //     }
+                        // } 
                         bbox.value = associated_trk.mode * 1.0;
                         bbox.pose.position.x = t_baselink_bbox.getOrigin().x();
                         bbox.pose.position.y = t_baselink_bbox.getOrigin().y();

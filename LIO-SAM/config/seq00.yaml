@@ -102,7 +102,7 @@ tracking_debug: false
 # TRACKING
 # ----------------------
 tracking:
-  enableTracking: true
+  enableTracking: false
   clustering: 
     method: "graph" # 'euclidean' or 'graph' or 'slr'
     nongroundDownSample: 0.05 # opt: 0.05
@@ -127,8 +127,8 @@ tracking:
     weightBirth: 0.2
     samplingPeriod: 0.1
     processNoise: 1e-12
-    spawnPoseNoise: 90 # opt: 90 mapping: 40
-    spawnVelNoise: 20 # opt: 20 mapping: 10
+    spawnPoseNoise: 10 # opt: 90 mapping: 40 mapping: 100
+    spawnVelNoise: 5 # opt: 20 mapping: 10 mapping: 20
     detectionProb: 1.0
     measPoseNoise: 1.0
     measSpeedNoise: 4.0
@@ -142,8 +142,8 @@ tracking:
   lshape:
     minHeight: 0.3 # opt: 0.5
     maxHeight: 3.0
-    maxArea: 50.0 
-    maxRatio: 9.0
+    maxArea: 60.0 
+    maxRatio: 16.0
     minDensity: 3.0
     maxDensity: 1500
 
@@ -151,19 +151,22 @@ tracking:
 # REMOVAL
 # ----------------------
 removal:
-  enableDynamicRemoval: true
+  enableDynamicRemoval: false
   velThres: 0.05
   modeProbThres: 0.5
+  dynamicCnt: 5
+  enableDynamicCount: true
 
 # ----------------------
 # EXPERIMENT
 # ----------------------
 experiment:
-  slam_save_dir: "/home/euigon/experiment/traj_result_dynamic/city/"
+  slam_save_dir: "/home/euigon/experiment/traj_result/city/"
   trk_save_dir: "/home/euigon/experiment/trk_result/"
   cluster_save_dir: "/home/euigon/experiment/cls_result/"
   eval_tracking: false
   eval_slam: true
+  eval_dynamic: false
   eval_clustering: false
   max_out_cnt: 20
   lidar_scope: 40.0

@@ -146,7 +146,7 @@ tracking:
     maxHeight: 3.0
     maxArea: 20.0 # opt: 30 
     maxRatio: 7.0 # opt: 9.0
-    minDensity: 5.0 # opt: 3.0
+    minDensity: 3.0 # opt: 3.0
     maxDensity: 150 # opt: 1500
 
 # ----------------------

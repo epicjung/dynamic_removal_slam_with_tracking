@@ -127,8 +127,8 @@ tracking:
     weightBirth: 0.2
     samplingPeriod: 0.1
     processNoise: 1e-12
-    spawnPoseNoise: 40 # opt: 90 mapping: 40
-    spawnVelNoise: 10 # opt: 20 mapping: 10
+    spawnPoseNoise: 90 # opt: 90 mapping: 40
+    spawnVelNoise: 20 # opt: 20 mapping: 10
     detectionProb: 1.0
     measPoseNoise: 1.0
     measSpeedNoise: 4.0
@@ -154,6 +154,8 @@ removal:
   enableDynamicRemoval: true
   velThres: 0.05
   modeProbThres: 0.5
+  dynamicCnt: 5
+  enableDynamicCount: true
 
 # ----------------------
 # EXPERIMENT
@@ -164,6 +166,7 @@ experiment:
   cluster_save_dir: "/home/euigon/experiment/cls_result/"
   eval_tracking: false
   eval_slam: true
+  eval_dynamic: false
   eval_clustering: false
   max_out_cnt: 20
   lidar_scope: 40.0

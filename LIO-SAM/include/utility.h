@@ -190,6 +190,8 @@ public:
     float velThres;
     float modeProbThres;
     bool enableDynamicRemoval;
+    bool enableDynamicCount;
+    int dynamicCnt;
 
     // filter
     float meanXBirth;
@@ -370,8 +372,12 @@ public:
         nh.param<float>(  "tracking/lshape/maxDensity", maxDensity, 10.0);
 
         nh.param<bool>("removal/enableDynamicRemoval", enableDynamicRemoval, false);
+        nh.param<bool>("removal/enableDynamicCount", enableDynamicCount, false);
+
         nh.param<float>("removal/velTrhes", velThres, 0.3);
         nh.param<float>("removal/modeProbThres", modeProbThres, 0.7);
+        nh.param<int>("removal/dynamicCnt", dynamicCnt, false);
+
 
         nh.param<string>("experiment/cluster_save_dir", cls_save_dir, "");
         nh.param<bool>("experiment/eval_clustering", eval_clustering, false);

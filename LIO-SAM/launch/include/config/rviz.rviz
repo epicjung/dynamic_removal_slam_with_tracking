@@ -18,6 +18,7 @@ Panels:
         - /Tracking1/meas_cluster1
         - /Tracking1/track_cent1
         - /Tracking1/BoundingBoxArray1
+        - /Tracking1/BoundingBoxArray2
         - /Segmentation1
         - /Segmentation1/ground1
         - /Segmentation1/nonground_ds1
@@ -219,13 +220,13 @@ Visualization Manager:
         - Alpha: 1
           Autocompute Intensity Bounds: false
           Autocompute Value Bounds:
-            Max Value: 1.3444143533706665
-            Min Value: -1.8919061422348022
+            Max Value: 1.2598836421966553
+            Min Value: -1.8963536024093628
             Value: true
           Axis: Z
           Channel Name: intensity
           Class: rviz/PointCloud2
-          Color: 255; 255; 255
+          Color: 136; 138; 133
           Color Transformer: AxisColor
           Decay Time: 1000
           Enabled: true
@@ -239,7 +240,7 @@ Visualization Manager:
           Queue Size: 10
           Selectable: false
           Size (Pixels): 2
-          Size (m): 0.15000000596046448
+          Size (m): 0.10000000149011612
           Style: Squares
           Topic: /lio_sam/mapping/cloud_registered
           Unreliable: false
@@ -362,7 +363,7 @@ Visualization Manager:
           Buffer Length: 1
           Class: rviz/Path
           Color: 85; 255; 255
-          Enabled: true
+          Enabled: false
           Head Diameter: 0.30000001192092896
           Head Length: 0.20000000298023224
           Length: 0.30000001192092896
@@ -380,7 +381,7 @@ Visualization Manager:
           Shaft Length: 0.10000000149011612
           Topic: /lio_sam/mapping/path
           Unreliable: false
-          Value: true
+          Value: false
         - Alpha: 1
           Buffer Length: 1
           Class: rviz/Path
@@ -456,7 +457,7 @@ Visualization Manager:
           Color: 252; 233; 79
           Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: true
+          Enabled: false
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -471,7 +472,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -482,9 +483,9 @@ Visualization Manager:
           Channel Name: intensity
           Class: rviz/PointCloud2
           Color: 255; 255; 255
-          Color Transformer: Intensity
+          Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: false
+          Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -493,21 +494,21 @@ Visualization Manager:
           Queue Size: 10
           Selectable: true
           Size (Pixels): 3
-          Size (m): 0.07999999821186066
+          Size (m): 0.10000000149011612
           Style: Squares
           Topic: /tracking/lidar/meas_cluster
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: false
+          Value: true
         - Class: rviz/MarkerArray
-          Enabled: true
+          Enabled: false
           Marker Topic: /tracking/lidar/meas_cluster_info
           Name: meas_info
           Namespaces:
             {}
           Queue Size: 100
-          Value: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -565,19 +566,19 @@ Visualization Manager:
           Use rainbow: true
           Value: false
         - Class: rviz/MarkerArray
-          Enabled: true
+          Enabled: false
           Marker Topic: /tracking/lidar/tracker_cluster_info
           Name: track_info
           Namespaces:
-            "": true
+            {}
           Queue Size: 100
-          Value: true
+          Value: false
         - Class: jsk_rviz_plugin/BoundingBoxArray
-          Enabled: true
+          Enabled: false
           Name: BoundingBoxArray
           Topic: /tracking/lidar/bbox
           Unreliable: false
-          Value: true
+          Value: false
           alpha: 0.800000011920929
           color: 186; 189; 182
           coloring: Flat color
@@ -585,16 +586,16 @@ Visualization Manager:
           only edge: false
           show coords: false
         - Class: jsk_rviz_plugin/BoundingBoxArray
-          Enabled: false
+          Enabled: true
           Name: BoundingBoxArray
-          Topic: /tracking/lidar/bbox_MAR
+          Topic: /exp/est_bbox
           Unreliable: false
-          Value: false
-          alpha: 0.800000011920929
+          Value: true
+          alpha: 0.4000000059604645
           color: 255; 0; 248
-          coloring: Flat color
+          coloring: Value
           line width: 0.05000000074505806
-          only edge: true
+          only edge: false
           show coords: false
       Enabled: true
       Name: Tracking
@@ -704,7 +705,7 @@ Visualization Manager:
           Color: 255; 0; 248
           Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: true
+          Enabled: false
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
@@ -719,7 +720,7 @@ Visualization Manager:
           Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
-          Value: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -1067,25 +1068,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 29.266571044921875
+      Distance: 38.54657745361328
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.9331890940666199
-        Y: 1.3154823780059814
-        Z: -1.6785049438476562
+        X: -1.647263526916504
+        Y: -1.6608130931854248
+        Z: -5.975484371185303
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.0697972774505615
+      Pitch: 0.9697971940040588
       Target Frame: base_link
       Value: Orbit (rviz)
-      Yaw: 3.046727418899536
+      Yaw: 1.5153990983963013
     Saved: ~
 Window Geometry:
   Displays:

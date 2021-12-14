@@ -487,7 +487,7 @@ class Experiment
                 for (auto &pt : inside_points->points) {
                     int label = (int)pt.intensity;
                     if (it_to_cnt.find(label) == it_to_cnt.end()) {
-                        it_to_cnt[label] = 1;
+                        it_to_cnt.insert(std::make_pair(label, 1));
                     } else {
                         it_to_cnt[label]++;
                     }
@@ -570,7 +570,7 @@ class Experiment
         for (size_t i = 0; i < msg_in->objects.size(); i++) {
             derived_object_msgs::Object obj = msg_in->objects[i];
             if (object_cnt.find(obj.classification) == object_cnt.end()) {
-                object_cnt[obj.classification] = 1;
+                object_cnt.insert(std::make_pair(obj.classification, 1));
             } else {
                 object_cnt[obj.classification]++;
             }
