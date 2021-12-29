@@ -16,13 +16,9 @@ Panels:
         - /Mapping1/Map (cloud)1
         - /Tracking1
         - /Tracking1/meas_cluster1
-        - /Tracking1/track_cent1
-        - /Tracking1/BoundingBoxArray1
         - /Tracking1/BoundingBoxArray2
-        - /Segmentation1
         - /Segmentation1/ground1
         - /Segmentation1/nonground_ds1
-        - /evaluation1
         - /evaluation1/Tracking1
         - /evaluation1/Tracking1/Estimated1
         - /evaluation1/Tracking1/Ground-truth1
@@ -30,10 +26,6 @@ Panels:
         - /evaluation1/SLAM1
         - /evaluation1/SLAM1/gt1/Shape1
         - /evaluation1/SLAM1/est1/Shape1
-        - /BoundingBoxArray1
-        - /Init1
-        - /reject1
-        - /revert1
       Splitter Ratio: 0.5600000023841858
     Tree Height: 348
   - Class: rviz/Selection
@@ -220,8 +212,8 @@ Visualization Manager:
         - Alpha: 1
           Autocompute Intensity Bounds: false
           Autocompute Value Bounds:
-            Max Value: 1.2598836421966553
-            Min Value: -1.8963536024093628
+            Max Value: 1.4941567182540894
+            Min Value: -1.6048003435134888
             Value: true
           Axis: Z
           Channel Name: intensity
@@ -240,7 +232,7 @@ Visualization Manager:
           Queue Size: 10
           Selectable: false
           Size (Pixels): 2
-          Size (m): 0.10000000149011612
+          Size (m): 0.05000000074505806
           Style: Squares
           Topic: /lio_sam/mapping/cloud_registered
           Unreliable: false
@@ -434,13 +426,13 @@ Visualization Manager:
           Use rainbow: true
           Value: false
         - Class: rviz/MarkerArray
-          Enabled: true
+          Enabled: false
           Marker Topic: /lio_sam/mapping/loop_closure_constraints
           Name: Loop constraint
           Namespaces:
             {}
           Queue Size: 100
-          Value: true
+          Value: false
       Enabled: true
       Name: Mapping
     - Class: rviz/Group
@@ -482,7 +474,7 @@ Visualization Manager:
           Axis: Z
           Channel Name: intensity
           Class: rviz/PointCloud2
-          Color: 255; 255; 255
+          Color: 255; 0; 248
           Color Transformer: FlatColor
           Decay Time: 0
           Enabled: true
@@ -591,12 +583,20 @@ Visualization Manager:
           Topic: /exp/est_bbox
           Unreliable: false
           Value: true
-          alpha: 0.4000000059604645
-          color: 255; 0; 248
-          coloring: Value
-          line width: 0.05000000074505806
-          only edge: false
+          alpha: 1
+          color: 255; 255; 255
+          coloring: Flat color
+          line width: 0.07999999821186066
+          only edge: true
           show coords: false
+        - Class: rviz/MarkerArray
+          Enabled: true
+          Marker Topic: /exp/est_bbox_info
+          Name: bbox_info
+          Namespaces:
+            "": true
+          Queue Size: 100
+          Value: true
       Enabled: true
       Name: Tracking
     - Class: rviz/Group
@@ -980,7 +980,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Min Color: 0; 0; 0
@@ -995,7 +995,7 @@ Visualization Manager:
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -1008,7 +1008,7 @@ Visualization Manager:
       Color: 255; 0; 0
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Min Color: 0; 0; 0
@@ -1023,7 +1023,7 @@ Visualization Manager:
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -1036,7 +1036,7 @@ Visualization Manager:
       Color: 0; 0; 255
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Min Color: 0; 0; 0
@@ -1051,7 +1051,7 @@ Visualization Manager:
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
@@ -1068,25 +1068,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 38.54657745361328
+      Distance: 41.30849075317383
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -1.647263526916504
-        Y: -1.6608130931854248
-        Z: -5.975484371185303
+        X: 1.8826146125793457
+        Y: 0.6335353851318359
+        Z: -3.3335840702056885
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.9697971940040588
+      Pitch: 0.7047969698905945
       Target Frame: base_link
       Value: Orbit (rviz)
-      Yaw: 1.5153990983963013
+      Yaw: 2.7017743587493896
     Saved: ~
 Window Geometry:
   Displays:

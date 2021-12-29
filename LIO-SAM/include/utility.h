@@ -225,6 +225,7 @@ public:
     std::string trk_save_dir;
     bool eval_clustering;
     bool eval_tracking;
+    bool eval_mapping;
     ParamServer()
     {
         nh.param<std::string>("/robot_id", robot_id, "roboat");
@@ -384,6 +385,7 @@ public:
 
         nh.param<string>("experiment/trk_save_dir", trk_save_dir, "");
         nh.param<bool>("experiment/eval_tracking", eval_tracking, false);
+        nh.param<bool>("experiment/eval_mapping", eval_mapping, false);
 
         nh.param<std::string>("rosbag/type", dataType, "normal");
 

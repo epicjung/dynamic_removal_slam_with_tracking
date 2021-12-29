@@ -168,6 +168,7 @@ experiment:
   eval_dynamic: true
   eval_slam: false
   eval_clustering: false
+  eval_mapping: false
   max_out_cnt: 20
   lidar_scope: 40.0 # opt: 40
   min_pt_cnt: 30

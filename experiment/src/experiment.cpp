@@ -124,6 +124,10 @@ class Statistics
         int PT = 0; // partially tracked
         int ML = 0; // mostly lost
         
+        // Mapping
+        int t_dyn_cnt = 0;
+        int t_removed_cnt = 0;
+
         // Clustering
         std::vector<float> GTR_entropies;
         std::vector<float> PR_entropies;
@@ -151,6 +155,7 @@ class Experiment
         bool eval_slam;
         bool eval_tracking;
         bool eval_dynamic;
+        bool eval_mapping;
         bool eval_clustering;
 
         // string SAVE_DIR = "/home/euigon/experiment/traj_result/";
@@ -208,6 +213,11 @@ class Experiment
         map<uint8_t, uint8_t> object_cnt;
         int frame_cnt;
 
+        // mapping
+        float egoWidth;
+        float egoLength;
+        float lidarOffsetLength;
+        float lidarOffsetWidth;
 
     Experiment() {
 
@@ -228,11 +238,17 @@ class Experiment
         nh.param<bool>("experiment/eval_clustering", eval_clustering, false);
         nh.param<bool>("experiment/eval_slam", eval_slam, false);
         nh.param<bool>("experiment/eval_dynamic", eval_dynamic, false);
+        nh.param<bool>("experiment/eval_mapping", eval_mapping, false);
 
         nh.param<float>("experiment/lidar_scope", lidar_scope, 40.0);
         nh.param<int>("experiment/max_out_cnt", max_out_cnt, 10);
         nh.param<int>("experiment/min_pt_cnt", min_pt_cnt, 10);
         nh.param<float>("experiment/gnd_ratio", gnd_ratio, 0.7);
+
+        nh.param<float>("lio_sam/egoWidth", egoWidth, 2.0);
+        nh.param<float>("lio_sam/egoLength", egoLength, 2.0);
+        nh.param<float>("lio_sam/lidarOffsetLength", lidarOffsetLength, 2.0);
+        nh.param<float>("lio_sam/lidarOffsetWidth", lidarOffsetWidth, 2.0);
 
         t_ego_lidar = tf::Transform(tf::createQuaternionFromYaw(0.0), tf::Vector3(-0.2, 0.0, 1.9));        
         
@@ -399,8 +415,17 @@ class Experiment
             cls_output.close();        
         }
 
+        if (eval_mapping) {
+            cout << "Mapping result: " << 1.0 * stat.t_removed_cnt / stat.t_dyn_cnt << endl;
+            cout << "Total: " << stat.t_dyn_cnt << endl;
+            cout << "Removed: " << stat.t_removed_cnt << endl;  
+        }
+
     }
     void labeledCloudCallback(const sensor_msgs::PointCloud2::ConstPtr &msg_in) {
+        /* ----------------------
+         * CLUSTERING EVALUATION
+         * ---------------------- */
         if (!eval_clustering)
             return;
 
@@ -659,13 +684,17 @@ class Experiment
     }
 
     void estBoundingBoxCallback(const jsk_recognition_msgs::BoundingBoxArray::ConstPtr &msg_in) {
-        if (eval_tracking || eval_dynamic) {
-            jsk_recognition_msgs::BoundingBoxArray cur_bbox = *msg_in;
-            est_bbox_queue.push_back(cur_bbox);
+        jsk_recognition_msgs::BoundingBoxArray cur_bbox = *msg_in;
+        est_bbox_queue.push_back(cur_bbox);
+        if (eval_tracking || eval_dynamic) {    
             if (data_type == "carla")
                 tracking_evaluate_carla();
             else if (data_type == "kitti")
                 tracking_evaluate_kitti();
+        }
+
+        if (eval_mapping) {
+            mapping_evaluate();
         }
     }
 
@@ -677,7 +706,66 @@ class Experiment
         }
     }
 
-   void tracking_evaluate_kitti() {
+    void mapping_evaluate() {
+        if (est_bbox_queue.empty() || cloud_queue.empty()) 
+            return;
+        
+        jsk_recognition_msgs::BoundingBoxArray cur_bbox_array = est_bbox_queue.front();
+        est_bbox_queue.pop_front();
+
+        // look for point cloud
+        while (cloud_queue.front().header.stamp < cur_bbox_array.header.stamp) {
+            cloud_queue.pop_front();
+        }
+        if (cloud_queue.empty())
+            return;
+
+        sensor_msgs::PointCloud2 current_cloud = cloud_queue.front();
+        assert(current_cloud.front().header.stamp.toSec() == cur_bbox_array.header.stamp.toSec());
+
+        pcl::PointCloud<PointCarla>::Ptr pcl_cloud(new pcl::PointCloud<PointCarla>());
+        pcl::moveFromROSMsg(current_cloud, *pcl_cloud);
+        int dynamic_cnt = 0;
+        int removed_cnt = 0;
+        for (auto pt : pcl_cloud->points) {
+            if (pt.ObjTag == 4u || pt.ObjTag == 10u) {
+                bool inside = (pt.y >= -egoWidth/2.0 && pt.y <= egoWidth/2.0) && (pt.x <= egoLength / 2.0 - lidarOffsetLength && pt.x >= -egoLength / 2.0 - lidarOffsetLength);
+                if (inside)
+                    continue;
+                dynamic_cnt++;
+                for (auto bbox : cur_bbox_array.boxes) {
+                    // check whether a point inside a dynamic box
+                    tf::Quaternion quat;
+                    tf::quaternionMsgToTF(bbox.pose.orientation, quat);        
+                    tf::Matrix3x3 rot_mat(quat);
+                    double roll, pitch, yaw;
+                    rot_mat.getRPY(roll, pitch, yaw);   
+
+                    float offset_x;
+                    float offset_y;
+                    float rot_x;
+                    float rot_y;
+                    int cnt = 0;
+                    offset_x = pt.x - bbox.pose.position.x;
+                    offset_y = pt.y - bbox.pose.position.y;
+                    rot_x = offset_x*cos(-yaw) - offset_y*sin(-yaw);
+                    rot_y = offset_x*sin(-yaw) + offset_y *cos(-yaw);
+                    if (rot_x >= -bbox.dimensions.x / 2.0 && 
+                        rot_x <= bbox.dimensions.x / 2.0 && 
+                        rot_y >= -bbox.dimensions.y / 2.0 &&
+                        rot_y <= bbox.dimensions.y / 2.0) {
+                            removed_cnt ++;
+                            break;
+                    }
+                }
+            }
+        }
+        cout << "Total dynamic: " << dynamic_cnt << ", removed: " << removed_cnt << endl;
+        stat.t_dyn_cnt += dynamic_cnt;
+        stat.t_removed_cnt += removed_cnt;
+    }
+
+    void tracking_evaluate_kitti() {
         printf("---------EVALUATING KITTI DATASET-------------\n");
         printf("est bbox: %d, cloud_queue: %d, gt bbox: %d\n", (int)est_bbox_queue.size(), (int)cloud_queue.size(), (int)gt_bbox_queue.size());
 

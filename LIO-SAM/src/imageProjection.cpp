@@ -114,6 +114,7 @@ private:
     ros::Publisher pub_bbox;
     ros::Publisher pub_MAR_bbox;
     ros::Publisher pub_associated_bbox;
+    ros::Publisher pub_associated_info;
     ros::Publisher pub_meas_cluster_info;
     ros::Publisher pub_tracker_cluster_info;
     ros::Publisher pub_ground_cloud;
@@ -164,7 +165,7 @@ public:
         pub_static_scene = nh.advertise<sensor_msgs::PointCloud2>("/segmentation/static", 1);
         
         pub_associated_bbox = nh.advertise<jsk_recognition_msgs::BoundingBoxArray>("/exp/est_bbox", 1);
-        
+        pub_associated_info = nh.advertise<visualization_msgs::MarkerArray>("/exp/est_bbox_info", 1);
         allocateMemory();
         resetParameters();
 
@@ -840,12 +841,14 @@ public:
         deleter.markers.push_back(deleter_marker);
         pub_meas_cluster_info.publish(deleter);
         pub_tracker_cluster_info.publish(deleter);
+        pub_associated_info.publish(deleter);
 
         jsk_recognition_msgs::BoundingBoxArray bbox_array;
         bbox_array.header.stamp = this_stamp;
         bbox_array.header.frame_id = this_frame;
         pub_bbox.publish(bbox_array);
         pub_MAR_bbox.publish(bbox_array);
+        pub_associated_bbox.publish(bbox_array);
     }
 
     void tracking(pcl::PointCloud<PointType>::Ptr cloud_in)
@@ -1059,7 +1062,7 @@ public:
 
                 // check dynamic count
                 if (dyn_cnt_by_id[tracked[i].id] >= dynamicCnt) {
-                    printf("Over -- id: %d, cnt: %d\n", tracked[i].id, dyn_cnt_by_id[tracked[i].id]);
+                    // printf("Over -- id: %d, cnt: %d\n", tracked[i].id, dyn_cnt_by_id[tracked[i].id]);
                     tracked[i].type = 1;
                 } else {
                     // printf("Under -- id: %d, cnt: %d\n", tracked[i].id, dyn_cnt_by_id[tracked[i].id]);
@@ -1097,7 +1100,7 @@ public:
 
         // 10. Publish assoicated bounding box
         if (dataType == "carla")
-            publishAssociatedBoundingBoxCarla(&pub_associated_bbox, tracker_to_meas, meas_map, tracker_map,
+            publishAssociatedBoundingBoxCarla(&pub_associated_bbox, &pub_associated_info, tracker_to_meas, meas_map, tracker_map,
                                         init_transform, cloudHeader.stamp, lidarFrame);
         else if (dataType == "kitti") 
             publishAssociatedBoundingBoxKitti(&pub_associated_bbox, tracker_to_meas, meas_map, tracker_map, 
@@ -1456,10 +1459,11 @@ public:
         }
     }
 
-    void publishAssociatedBoundingBoxCarla(ros::Publisher *this_pub, map<int, int> association_map, ClusterMap meas_map, ClusterMap track_map,
+    void publishAssociatedBoundingBoxCarla(ros::Publisher *this_pub, ros::Publisher *info_pub, map<int, int> association_map, ClusterMap meas_map, ClusterMap track_map,
                                       tf::StampedTransform tf_odom_baselink, ros::Time timestamp, string this_frame) {
-        if (this_pub->getNumSubscribers() != 0) {
+        if (this_pub->getNumSubscribers() != 0 || info_pub->getNumSubscribers() != 0) {
             jsk_recognition_msgs::BoundingBoxArray bbox_array;
+            visualization_msgs::MarkerArray markers;
             bbox_array.header.stamp = timestamp;
             bbox_array.header.frame_id = this_frame;
             std::vector<Cluster> meas_clusters = meas_map.getMap();
@@ -1504,8 +1508,24 @@ public:
                     bbox.pose.orientation.w = t_baselink_bbox.getRotation().w();
                     bbox_array.boxes.push_back(bbox);
                     
+                    // centroid and arrows
+                    visualization_msgs::Marker marker;
+                    marker.header = bbox_array.header;
+                    marker.type = 9;
+                    marker.action = 0;
+                    marker.scale.z = 0.8;
+                    marker.color.a = 1.0;
+                    marker.id = track_id;
+                    marker.color.r = 1.0;
+                    marker.text = to_string(track_id);
+                    marker.pose.position.x = bbox.pose.position.x;
+                    marker.pose.position.y = bbox.pose.position.y;
+                    marker.pose.position.z = bbox.pose.position.z;
+                    marker.pose.orientation.w = 1.0;
+                    markers.markers.push_back(marker);
                 }
             }
+            info_pub->publish(markers);
             this_pub->publish(bbox_array);
         }
     } 

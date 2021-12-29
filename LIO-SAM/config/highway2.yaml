@@ -140,7 +140,7 @@ tracking:
 
   # L-Shape fitting
   lshape:
-    minHeight: 0.0 # opt: 0.5
+    minHeight: 0.1 # opt: 0.5
     maxHeight: 3.0
     maxArea: 30.0 
     maxRatio: 9.0
@@ -151,7 +151,7 @@ tracking:
 # REMOVAL
 # ----------------------
 removal:
-  enableDynamicRemoval: true
+  enableDynamicRemoval: false
   velThres: 0.05
   modeProbThres: 0.5
   dynamicCnt: 5
@@ -165,9 +165,10 @@ experiment:
   trk_save_dir: "/home/euigon/experiment/trk_result/"
   cluster_save_dir: "/home/euigon/experiment/cls_result/"
   eval_tracking: false
-  eval_slam: true
+  eval_slam: false
   eval_dynamic: false
   eval_clustering: false
+  eval_mapping: false
   max_out_cnt: 20
   lidar_scope: 40.0
   min_pt_cnt: 20 # opt 30
